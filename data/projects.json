@@ -1,0 +1,47 @@
+[
+  {
+    "id": "internal_rdrs",
+    "name": "Internal - RDRS",
+    "tasks": ["Discussion (External)", "Discussion (Internal)", "Document", "Testing", "Training"]
+  },
+  {
+    "id": "maybank_impl",
+    "name": "Malayan Banking Bhd - RDRS Implementation",
+    "tasks": ["Meeting", "Project Kickoff", "Requirement Study and Design", "SIT Preparation", "UAT Preparation", "UAT Support"]
+  },
+  {
+    "id": "maybank_presales",
+    "name": "Malayan Banking Bhd - RDRS Presales",
+    "tasks": ["Meeting", "POC", "Presentation"]
+  },
+  {
+    "id": "maybank_sg_presales",
+    "name": "Maybank Singapore Limited - RDRS Presales",
+    "tasks": ["Meeting", "POC", "Presentation"]
+  },
+  {
+    "id": "rhb_presales",
+    "name": "RHB Bank Bhd - RDRS Presales",
+    "tasks": ["Internal Discussion", "Meeting", "POC", "Presentation"]
+  },
+  {
+    "id": "internal_ai",
+    "name": "Internal - AI Exploration",
+    "tasks": ["Configuration", "Document", "Meeting", "Testing"]
+  },
+  {
+    "id": "internal_infra",
+    "name": "Internal - Infra",
+    "tasks": ["Deploy Server", "Housekeep", "Monitoring", "Troubleshooting"]
+  },
+  {
+    "id": "internal_mobius",
+    "name": "Internal - Mobius",
+    "tasks": ["Discussion (External)", "Discussion (Internal)", "Testing", "Training"]
+  },
+  {
+    "id": "internal_office",
+    "name": "Internal - Office",
+    "tasks": ["Document", "Incident Support", "Intern", "Meeting", "Special Task", "Task Plan"]
+  }
+]
