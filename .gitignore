@@ -28,3 +28,6 @@ desktop.ini
 
 # Database (local only)
 *.db
+
+# Projects config — contains client names, keep local only
+data/projects.json
