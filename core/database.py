@@ -6,7 +6,7 @@ All log entries stored in AppData\Local\WorkPulse\workpulse.db
 import sqlite3
 import threading
 import requests
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from contextlib import contextmanager
 from core.config import DB_FILE, ensure_app_dir, load_projects, get
 
@@ -152,6 +152,37 @@ def log_entry(project_id, project_name, task, stopped_at=None, notes="") -> int:
         notes=notes,
         today=today
     )
+
+
+def log_interrupt(project_id: str, project_name: str, task: str, duration_minutes: int) -> int:
+    """
+    Log a quick side task without affecting the active entry.
+    Creates a completed entry spanning (now - duration_minutes) → now.
+    The active task timer continues unaffected.
+    """
+    now = datetime.now()
+    end_time = now.strftime("%H:%M")
+    start_time = (now - timedelta(minutes=duration_minutes)).strftime("%H:%M")
+    today = date.today().isoformat()
+
+    entry_id = add_entry(
+        project_id=project_id,
+        project_name=project_name,
+        task=task,
+        start_time=start_time,
+        end_time=end_time,
+        today=today,
+    )
+
+    entry = {
+        "project_id": project_id,
+        "task": task,
+        "start_time": start_time,
+        "date": today,
+        "is_break": False,
+    }
+    _push_to_clockify(entry, end_time)
+    return entry_id
 
 
 def extend_active_entry():
