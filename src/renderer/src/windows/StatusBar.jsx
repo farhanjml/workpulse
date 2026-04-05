@@ -65,16 +65,20 @@ export default function StatusBar() {
 
   const expand = () => {
     clearTimeout(collapseTimer.current)
+    window.api.statusBarInteractive?.()
     setExpanded(true)
     refresh()
   }
   const scheduleCollapse = () => {
-    collapseTimer.current = setTimeout(() => setExpanded(false), 1500)
+    collapseTimer.current = setTimeout(() => {
+      setExpanded(false)
+      window.api.statusBarPassthrough?.()
+    }, 1500)
   }
 
   return (
     <div
-      style={{ padding: 20 }}
+      style={{ padding: '8px 20px', display: 'flex', justifyContent: 'center' }}
       onMouseEnter={expand}
       onMouseLeave={scheduleCollapse}
     >

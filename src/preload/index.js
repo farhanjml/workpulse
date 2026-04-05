@@ -21,6 +21,10 @@ contextBridge.exposeInMainWorld('api', {
   totalMinutes: (date)   => ipcRenderer.invoke('db:total-minutes', date),
   deleteEntry:  (id)     => ipcRenderer.invoke('db:delete-entry', id),
 
+  // Status bar mouse pass-through toggle
+  statusBarInteractive: () => ipcRenderer.send('statusbar:interactive'),
+  statusBarPassthrough: () => ipcRenderer.send('statusbar:passthrough'),
+
   // Events from main → renderer
   on: (channel, cb) => {
     ipcRenderer.on(channel, (_e, ...args) => cb(...args))

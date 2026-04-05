@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray, Menu, Notification, nativeImage, globalShortcut, screen, shell } from 'electron'
+import { app, BrowserWindow, Tray, Menu, Notification, nativeImage, globalShortcut, screen, shell, ipcMain } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { initDb, countEntriesToday, getActiveEntry, endCurrentEntry, getTotalLoggedMinutes } from './database.js'
@@ -12,26 +12,19 @@ function getLogPath() {
   try { return path.join(app.getPath('userData'), 'error.log') } catch { return null }
 }
 
-function writeLog(label, err) {
+export function writeLog(label, err) {
   const logPath = getLogPath()
   if (!logPath) return
   const line = `[${new Date().toISOString()}] ${label}: ${err?.stack || err}\n`
   try { fs.appendFileSync(logPath, line) } catch {}
 }
 
-process.on('uncaughtException', (err) => {
-  writeLog('uncaughtException', err)
-})
-
-process.on('unhandledRejection', (err) => {
-  writeLog('unhandledRejection', err)
-})
+process.on('uncaughtException', (err) => { writeLog('uncaughtException', err) })
+process.on('unhandledRejection', (err) => { writeLog('unhandledRejection', err) })
 
 // ── Dev/Prod URL helper ───────────────────────────────────────────────────────
 function winURL(windowName) {
-  if (!app.isPackaged) {
-    return `http://localhost:5173/?window=${windowName}`
-  }
+  if (!app.isPackaged) return `http://localhost:5173/?window=${windowName}`
   return `file://${path.join(app.getAppPath(), 'out/renderer/index.html')}?window=${windowName}`
 }
 
@@ -39,7 +32,10 @@ function winURL(windowName) {
 const wins = {}
 
 function createWindow(name, opts) {
-  if (wins[name]) return wins[name]
+  // Return existing only if not destroyed
+  if (wins[name] && !wins[name].isDestroyed()) return wins[name]
+  if (wins[name]) delete wins[name]
+
   const base = {
     frame: false,
     transparent: true,
@@ -55,21 +51,13 @@ function createWindow(name, opts) {
   const win = new BrowserWindow({ ...base, ...opts })
   win.loadURL(winURL(name))
   win.on('close', (e) => { if (isQuitting) return; e.preventDefault(); win.hide() })
+  win.on('closed', () => { delete wins[name] })
   wins[name] = win
   return win
 }
 
-function getWin(name) { return wins[name] ?? null }
-
-function showWin(name) {
-  const w = getWin(name)
-  if (!w) return
-  w.show()
-  w.focus()
-}
-
 function sendToWin(name, channel, data) {
-  const w = getWin(name)
+  const w = wins[name]
   if (w && !w.isDestroyed()) w.webContents.send(channel, data)
 }
 
@@ -82,6 +70,7 @@ function centerTop(win, yOffset = 40) {
 }
 
 function posStatusBar(win) {
+  if (!win || win.isDestroyed()) return
   const { width } = screen.getPrimaryDisplay().workAreaSize
   const [w] = win.getSize()
   win.setPosition(Math.round((width - w) / 2), -8)
@@ -90,29 +79,25 @@ function posStatusBar(win) {
 // ── Tray ──────────────────────────────────────────────────────────────────────
 let tray = null
 
-function buildTrayIcon(state = 'idle') {
-  const colors = { active: '#4ade80', idle: '#e9bb51', overdue: '#ef4444' }
-  const c = colors[state] || colors.idle
-  // 16x16 transparent icon with colored dot — fallback to empty if icon files not found
-  const img = nativeImage.createFromDataURL(
+function buildTrayIcon() {
+  return nativeImage.createFromDataURL(
     `data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA` +
     `AXNSRkIB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAADlJREFUOI1j` +
     `YGBg+M9AAmAiRuP/GYaDBUaCASMpBiAD0oNBNGiAaNA4oIEGIAMoMGCA` +
     `ZAAAbgAFAumkpKQAAAAASUVORK5CYII=`
   )
-  return img
 }
 
 function buildTrayMenu(appRef) {
   return Menu.buildFromTemplate([
-    { label: 'View Log',   click: () => { appRef.summaryWin?.show(); appRef.summaryWin?.focus(); sendToWin('summary', 'refresh') } },
-    { label: 'Quick Log',  click: () => appRef.showQuickLog() },
-    { label: 'End Task',   click: () => { endCurrentEntry(); appRef.timer.onUserLogged(); appRef.refreshStatusBar() } },
+    { label: 'View Log',  click: () => { appRef.summaryWin?.show(); appRef.summaryWin?.focus(); sendToWin('summary', 'refresh') } },
+    { label: 'Quick Log', click: () => appRef.showQuickLog() },
+    { label: 'End Task',  click: () => { endCurrentEntry(); appRef.timer.onUserLogged(); appRef.refreshStatusBar() } },
     { type: 'separator' },
-    { label: 'Settings',   click: () => { appRef.settingsWin?.show(); appRef.settingsWin?.focus() } },
+    { label: 'Settings',  click: () => { appRef.settingsWin?.show(); appRef.settingsWin?.focus() } },
     { type: 'separator' },
     { label: 'Open Log File', click: () => { const p = getLogPath(); if (p && fs.existsSync(p)) shell.openPath(p) } },
-    { label: 'Exit',       click: () => app.quit() },
+    { label: 'Exit',      click: () => app.quit() },
   ])
 }
 
@@ -144,12 +129,8 @@ class WorkPulse {
     this._setupEodTimer()
     registerIpc({ timer: this.timer, windows: this, tray })
 
-    // Startup sync
-    if (isConfigured()) {
-      syncProjectsToCache().catch(() => {})
-    }
+    if (isConfigured()) syncProjectsToCache().catch(() => {})
 
-    // Greeting
     setTimeout(() => {
       const name = get('USER_NAME').split(' ')[0]
       notify(`Good morning, ${name}!`, 'WorkPulse is running. Press Alt+L to log your first task.')
@@ -166,10 +147,22 @@ class WorkPulse {
     this.interruptWin = createWindow('interrupt', { width: 380, minHeight: 280, maxWidth: 380 })
     this.interruptWin.once('ready-to-show', () => centerTop(this.interruptWin))
 
-    this.statusBarWin = createWindow('statusbar', { width: 64, height: 64, alwaysOnTop: true })
+    // Status bar: wide enough for expanded pill, transparent areas pass mouse through
+    this.statusBarWin = createWindow('statusbar', { width: 480, height: 64, alwaysOnTop: true })
     this.statusBarWin.once('ready-to-show', () => {
       posStatusBar(this.statusBarWin)
       this.statusBarWin.show()
+      this.statusBarWin.setIgnoreMouseEvents(true, { forward: true })
+    })
+
+    // IPC to toggle mouse interactivity from the renderer's hover handlers
+    ipcMain.on('statusbar:interactive', () => {
+      if (this.statusBarWin && !this.statusBarWin.isDestroyed())
+        this.statusBarWin.setIgnoreMouseEvents(false)
+    })
+    ipcMain.on('statusbar:passthrough', () => {
+      if (this.statusBarWin && !this.statusBarWin.isDestroyed())
+        this.statusBarWin.setIgnoreMouseEvents(true, { forward: true })
     })
 
     this.summaryWin = createWindow('summary', {
@@ -182,35 +175,30 @@ class WorkPulse {
       frame: true, transparent: false, alwaysOnTop: false,
       skipTaskbar: false, width: 480, height: 720, resizable: false, show: false,
     })
-    // Suspend global hotkeys while Settings is visible so key capture works cleanly
     this.settingsWin.on('show', () => globalShortcut.unregisterAll())
     this.settingsWin.on('hide', () => this.reregisterHotkeys())
   }
 
   _setupTray() {
-    tray = new Tray(buildTrayIcon('idle'))
+    tray = new Tray(buildTrayIcon())
     tray.setToolTip('WorkPulse')
     tray.setContextMenu(buildTrayMenu(this))
     tray.on('double-click', () => { this.summaryWin?.show(); this.summaryWin?.focus() })
-  }
-
-  _setupHotkeys() {
-    this.reregisterHotkeys()
   }
 
   reregisterHotkeys() {
     globalShortcut.unregisterAll()
     const hotkey = get('HOTKEY') || 'Alt+L'
     const interrupt = get('INTERRUPT_HOTKEY') || 'Alt+Shift+L'
-    try { globalShortcut.register(hotkey, () => this.showQuickLog()) } catch {}
-    try { globalShortcut.register(interrupt, () => this.showInterrupt()) } catch {}
+    try { globalShortcut.register(hotkey, () => this.showQuickLog()) } catch (e) { writeLog('hotkey', e) }
+    try { globalShortcut.register(interrupt, () => this.showInterrupt()) } catch (e) { writeLog('hotkey', e) }
   }
+
+  _setupHotkeys() { this.reregisterHotkeys() }
 
   _setupTimer() {
     this.timer = new PingTimer({
-      onPing: () => {
-        this._firePing()
-      },
+      onPing: () => this._firePing(),
       onIdle: (mins) => {
         sendToWin('statusbar', 'state', 'idle')
         notify('Welcome back!', `You were away ${mins} min. Open log to fill in the gap.`)
@@ -246,7 +234,9 @@ class WorkPulse {
 
   _firePing() {
     sendToWin('statusbar', 'state', 'active')
-    if (!this.pingWin || this.pingWin.isDestroyed()) return
+    if (!this.pingWin || this.pingWin.isDestroyed()) {
+      this.pingWin = createWindow('ping', { width: 400, minHeight: 300, maxWidth: 400 })
+    }
     centerTop(this.pingWin)
     this.pingWin.show()
     this.pingWin.focus()
@@ -255,7 +245,7 @@ class WorkPulse {
 
   showQuickLog() {
     if (!this.quickWin || this.quickWin.isDestroyed()) {
-      writeLog('warn', 'quickWin destroyed — recreating')
+      writeLog('warn', 'quickWin was destroyed — recreating')
       this.quickWin = createWindow('quick', { width: 420, minHeight: 280, maxWidth: 420 })
     }
     centerTop(this.quickWin, 50)
@@ -266,7 +256,7 @@ class WorkPulse {
 
   showInterrupt() {
     if (!this.interruptWin || this.interruptWin.isDestroyed()) {
-      writeLog('warn', 'interruptWin destroyed — recreating')
+      writeLog('warn', 'interruptWin was destroyed — recreating')
       this.interruptWin = createWindow('interrupt', { width: 380, minHeight: 280, maxWidth: 380 })
     }
     centerTop(this.interruptWin)
@@ -292,4 +282,4 @@ app.whenReady().then(() => {
 })
 
 app.on('will-quit', () => globalShortcut.unregisterAll())
-app.on('window-all-closed', (e) => e.preventDefault()) // keep running in tray
+app.on('window-all-closed', (e) => e.preventDefault())
