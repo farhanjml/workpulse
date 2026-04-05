@@ -24,12 +24,14 @@ DEFAULTS = {
     "HOTKEY": "alt+l",
     "SOUND_THEME": "soft_chime",
     "VOLUME": "60",
+    "PLAY_ON": "all",
     "START_ON_BOOT": "true",
     "DARK_MODE": "true",
     "WINDOW_TRACKING": "false",
     "CLIPBOARD_HINTS": "true",
     "CLOCKIFY_API_KEY": "",
     "CLOCKIFY_WORKSPACE_ID": "682c279d9eb4d30a38976325",
+    "LAST_CLOCKIFY_SYNC": "",
     "STATUS_BAR_DURATION": "10",
 }
 
