@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QSlider, QComboBox, QLineEdit,
     QFrame, QTimeEdit, QCheckBox, QScrollArea
 )
-from PyQt6.QtCore import Qt, QTime, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTime, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QKeySequence
 
 from core import config
@@ -200,12 +200,49 @@ class SettingsWindow(QWidget):
         body_layout.addWidget(SettingRow("Sound theme", self.cmb_sound))
         body_layout.addWidget(SettingRow("Volume", self.sld_volume))
 
+        self.cmb_play_on = QComboBox()
+        self.cmb_play_on.setFixedWidth(160)
+        play_on_options = [
+            ("All events", "all"),
+            ("Ping only", "ping_only"),
+            ("Ping + Overdue", "ping_overdue"),
+            ("None", "none"),
+        ]
+        play_on_val = self._cfg.get("PLAY_ON", "all")
+        for label, value in play_on_options:
+            self.cmb_play_on.addItem(label, value)
+        play_on_index = next((i for i, (_, v) in enumerate(play_on_options) if v == play_on_val), 0)
+        self.cmb_play_on.setCurrentIndex(play_on_index)
+        body_layout.addWidget(SettingRow("Play on", self.cmb_play_on))
+
         body_layout.addWidget(self._section_label("CLOCKIFY"))
         self.txt_api_key = QLineEdit()
         self.txt_api_key.setEchoMode(QLineEdit.EchoMode.Password)
         self.txt_api_key.setPlaceholderText("Paste API key here...")
         self.txt_api_key.setFixedWidth(200)
         body_layout.addWidget(SettingRow("API Key", self.txt_api_key))
+
+        self.btn_sync_projects = QPushButton("↻ Sync Projects")
+        self.btn_sync_projects.setStyleSheet(
+            "background: #b8860b; border-color: #b8860b; color: white; border-radius: 7px; padding: 9px 18px;"
+        )
+        self.btn_sync_projects.clicked.connect(self._sync_projects)
+        sync_row = QWidget()
+        sync_row.setStyleSheet("QWidget { background: #1c1c22; border-radius: 8px; } QWidget:hover { background: #242430; }")
+        sync_layout = QHBoxLayout(sync_row)
+        sync_layout.setContentsMargins(12, 8, 12, 8)
+        sync_label = QLabel("Sync Projects")
+        sync_label.setStyleSheet("color: #9090a8;")
+        sync_layout.addWidget(sync_label)
+        sync_layout.addStretch()
+        sync_layout.addWidget(self.btn_sync_projects)
+        body_layout.addWidget(sync_row)
+
+        last_sync = self._cfg.get("LAST_CLOCKIFY_SYNC", "")
+        sync_status_text = f"Last synced: {last_sync}" if last_sync else "Not synced yet"
+        self.lbl_sync_status = QLabel(sync_status_text)
+        self.lbl_sync_status.setStyleSheet("color: #3a3a52; font-size: 10px; padding: 0 12px;")
+        body_layout.addWidget(self.lbl_sync_status)
 
         body_layout.addStretch()
         scroll.setWidget(body)
@@ -247,6 +284,7 @@ class SettingsWindow(QWidget):
             "CLIPBOARD_HINTS": "true" if self.tog_clipboard.isChecked() else "false",
             "SOUND_THEME": theme_map.get(self.cmb_sound.currentIndex(), "soft_chime"),
             "VOLUME": str(self.sld_volume.value()),
+            "PLAY_ON": self.cmb_play_on.currentData(),
             "STATUS_BAR_DURATION": str(self.sld_status_dur.value()),
         }
         if self.txt_api_key.text().strip():
@@ -257,6 +295,34 @@ class SettingsWindow(QWidget):
         self.btn_save.setText("Saved ✓")
         self.btn_save.setStyleSheet("background: #4ade80; color: #0a2010; border-radius: 7px; padding: 9px 18px;")
         QTimer.singleShot(2000, self._reset_save_btn)
+
+    def _sync_projects(self):
+        self.btn_sync_projects.setText("Syncing...")
+        self.btn_sync_projects.setEnabled(False)
+        import threading
+        def _run():
+            from core.clockify import sync_projects_to_cache
+            ok = sync_projects_to_cache()
+            from PyQt6.QtCore import QMetaObject, Qt
+            QMetaObject.invokeMethod(
+                self, "_on_sync_done",
+                Qt.ConnectionType.QueuedConnection,
+                ok
+            )
+        threading.Thread(target=_run, daemon=True).start()
+
+    @pyqtSlot(bool)
+    def _on_sync_done(self, ok: bool):
+        from core.config import get
+        self.btn_sync_projects.setEnabled(True)
+        self.btn_sync_projects.setText("↻ Sync Projects")
+        if ok:
+            last_sync = get("LAST_CLOCKIFY_SYNC", "")
+            self.lbl_sync_status.setText(f"Last synced: {last_sync}")
+            self.lbl_sync_status.setStyleSheet("color: #3a3a52; font-size: 10px; padding: 0 12px;")
+        else:
+            self.lbl_sync_status.setText("Sync failed — check API key")
+            self.lbl_sync_status.setStyleSheet("color: #fca5a5; font-size: 10px;")
 
     def _reset_save_btn(self):
         self.btn_save.setText("Save")
