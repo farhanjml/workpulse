@@ -54,6 +54,7 @@ function sendToWin(name, channel, data) {
 
 // ── Position helpers ──────────────────────────────────────────────────────────
 function centerTop(win, yOffset = 40) {
+  if (!win || win.isDestroyed()) return
   const { width } = screen.getPrimaryDisplay().workAreaSize
   const [w] = win.getSize()
   win.setPosition(Math.round((width - w) / 2), yOffset)
@@ -159,6 +160,9 @@ class WorkPulse {
       frame: true, transparent: false, alwaysOnTop: false,
       skipTaskbar: false, width: 480, height: 720, resizable: false, show: false,
     })
+    // Suspend global hotkeys while Settings is visible so key capture works cleanly
+    this.settingsWin.on('show', () => globalShortcut.unregisterAll())
+    this.settingsWin.on('hide', () => this.reregisterHotkeys())
   }
 
   _setupTray() {

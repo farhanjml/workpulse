@@ -1,6 +1,6 @@
 {
   "name": "workpulse",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "15-minute task logger with Clockify integration",
   "main": "out/main/index.js",
   "author": "Farhan Jamaludin",
