@@ -45,6 +45,7 @@ class TraySignals(QObject):
     show_settings    = pyqtSignal()
     show_idle_return = pyqtSignal(int)
     show_overdue     = pyqtSignal(int)
+    task_ended       = pyqtSignal()
 
 
 class TrayIcon:
@@ -94,8 +95,9 @@ class TrayIcon:
     def _end_current_task(self):
         now = datetime.now().strftime("%H:%M")
         database.end_current_entry(now)
-        self.show_toast("Task ended", f"Closed at {now}")
+        self.show_toast("Task ended ✓", "Entry pushed to Clockify.")
         self._update_state()
+        self.signals.task_ended.emit()
 
     def _update_state(self):
         count = database.count_entries_today()

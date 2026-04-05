@@ -5,9 +5,9 @@ ui/settings.py — Settings window
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QSlider, QComboBox, QLineEdit,
-    QFrame, QTimeEdit, QCheckBox
+    QFrame, QTimeEdit, QCheckBox, QScrollArea
 )
-from PyQt6.QtCore import Qt, QTime, pyqtSignal
+from PyQt6.QtCore import Qt, QTime, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeySequence
 
 from core import config
@@ -141,13 +141,20 @@ class SettingsWindow(QWidget):
         h_layout.addWidget(lbl)
         layout.addWidget(header)
 
+        # Scrollable body
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; } QScrollBar:vertical { background: #1c1c22; width: 6px; border-radius: 3px; } QScrollBar::handle:vertical { background: #353545; border-radius: 3px; }")
+
         body = QWidget()
         body_layout = QVBoxLayout(body)
         body_layout.setContentsMargins(16, 16, 16, 16)
         body_layout.setSpacing(16)
 
         body_layout.addWidget(self._section_label("TIMING"))
-        self.sld_ping = SliderWithValue(5, 60, int(self._cfg.get("PING_INTERVAL", 15)), "m")
+        ping_val = int(self._cfg.get("PING_INTERVAL", 15))
+        self.sld_ping = SliderWithValue(1, 15, max(1, ping_val), "m")
         self.sld_idle = SliderWithValue(5, 30, int(self._cfg.get("IDLE_THRESHOLD", 10)), "m")
         self.sld_overdue = SliderWithValue(20, 90, int(self._cfg.get("OVERDUE_WARNING", 45)), "m")
         t_start = self._cfg.get("WORK_START", "09:00").split(":")
@@ -156,9 +163,12 @@ class SettingsWindow(QWidget):
         t_end = self._cfg.get("END_OF_DAY", "18:00").split(":")
         self.time_eod = QTimeEdit(QTime(int(t_end[0]), int(t_end[1])))
         self.time_eod.setFixedWidth(80)
+        dur_val = int(self._cfg.get("STATUS_BAR_DURATION", 10))
+        self.sld_status_dur = SliderWithValue(3, 30, dur_val, "s")
         body_layout.addWidget(SettingRow("Ping interval", self.sld_ping))
         body_layout.addWidget(SettingRow("Idle threshold", self.sld_idle))
         body_layout.addWidget(SettingRow("Overdue warning", self.sld_overdue))
+        body_layout.addWidget(SettingRow("Status bar duration", self.sld_status_dur))
         body_layout.addWidget(SettingRow("Work start time", self.time_start))
         body_layout.addWidget(SettingRow("End of day alert", self.time_eod))
 
@@ -198,7 +208,8 @@ class SettingsWindow(QWidget):
         body_layout.addWidget(SettingRow("API Key", self.txt_api_key))
 
         body_layout.addStretch()
-        layout.addWidget(body, 1)
+        scroll.setWidget(body)
+        layout.addWidget(scroll, 1)
 
         footer = QWidget()
         footer.setStyleSheet("background: #1c1c22; border-top: 1px solid #2a2a38;")
@@ -206,14 +217,14 @@ class SettingsWindow(QWidget):
         ft_layout = QHBoxLayout(footer)
         ft_layout.setContentsMargins(16, 0, 16, 0)
         ft_layout.setSpacing(8)
-        btn_save = QPushButton("Save")
-        btn_save.setObjectName("btnSave")
-        btn_save.clicked.connect(self._save)
-        btn_cancel = QPushButton("Cancel")
+        self.btn_save = QPushButton("Save")
+        self.btn_save.setObjectName("btnSave")
+        self.btn_save.clicked.connect(self._save)
+        btn_cancel = QPushButton("Close")
         btn_cancel.clicked.connect(self.hide)
         ft_layout.addStretch()
         ft_layout.addWidget(btn_cancel)
-        ft_layout.addWidget(btn_save)
+        ft_layout.addWidget(self.btn_save)
         layout.addWidget(footer)
 
     def _section_label(self, text: str) -> QLabel:
@@ -236,9 +247,17 @@ class SettingsWindow(QWidget):
             "CLIPBOARD_HINTS": "true" if self.tog_clipboard.isChecked() else "false",
             "SOUND_THEME": theme_map.get(self.cmb_sound.currentIndex(), "soft_chime"),
             "VOLUME": str(self.sld_volume.value()),
+            "STATUS_BAR_DURATION": str(self.sld_status_dur.value()),
         }
         if self.txt_api_key.text().strip():
             updates["CLOCKIFY_API_KEY"] = self.txt_api_key.text().strip()
         config.save_config({**config.load_config(), **updates})
         self.settings_saved.emit()
-        self.hide()
+        # Flash "Saved ✓" on button instead of closing
+        self.btn_save.setText("Saved ✓")
+        self.btn_save.setStyleSheet("background: #4ade80; color: #0a2010; border-radius: 7px; padding: 9px 18px;")
+        QTimer.singleShot(2000, self._reset_save_btn)
+
+    def _reset_save_btn(self):
+        self.btn_save.setText("Save")
+        self.btn_save.setStyleSheet("")

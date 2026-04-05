@@ -1,5 +1,7 @@
 """
 ui/quick_log.py — Hotkey-triggered quick log popup
+Shows current running task with End Task option.
+No favourites section.
 """
 
 from datetime import datetime, timedelta
@@ -19,13 +21,17 @@ QLineEdit:focus { border-color: #7c6af7; }
 QComboBox { background: #1c1c22; border: 1px solid #2a2a38; border-radius: 7px; padding: 7px 10px; font-size: 11px; color: #9090a8; }
 QComboBox:focus { border-color: #7c6af7; }
 QComboBox::drop-down { border: none; width: 20px; }
+QComboBox QAbstractItemView { background: #1c1c22; color: #e8e8f0; selection-background-color: #7c6af7; min-width: 300px; }
 QPushButton { border-radius: 7px; font-size: 12px; font-weight: 600; padding: 9px; border: none; }
 QPushButton#btnLog { background: #7c6af7; color: white; }
 QPushButton#btnLog:hover { background: #9d8fff; }
 QPushButton#btnCancel { background: #1c1c22; border: 1px solid #2a2a38; color: #5a5a72; }
 QPushButton#btnCancel:hover { color: #9090a8; }
+QPushButton#btnEndTask { background: #2a1a1a; border: 1px solid #f87171; color: #f87171; border-radius: 7px; padding: 8px 12px; font-size: 11px; }
+QPushButton#btnEndTask:hover { background: rgba(248,113,113,0.15); }
 QLabel#header { font-size: 10px; color: #5a5a72; letter-spacing: 2px; }
 QLabel#sectionLabel { font-size: 10px; color: #5a5a72; letter-spacing: 1px; }
+QLabel#activeLabel { font-size: 10px; color: #5a5a72; letter-spacing: 1px; }
 """
 
 
@@ -41,18 +47,22 @@ def _time_options(minutes_back: int = 90) -> list:
 
 class QuickLogPopup(QWidget):
     logged = pyqtSignal()
+    task_ended = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.projects = load_projects()
         self._setup_window()
         self._setup_ui()
-        self._position_bottom_right()
 
     def _setup_window(self):
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.WindowStaysOnTopHint |
+            Qt.WindowType.Tool
+        )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setFixedWidth(300)
+        self.setFixedWidth(420)
         self.setStyleSheet(STYLE)
 
     def _setup_ui(self):
@@ -64,6 +74,7 @@ class QuickLogPopup(QWidget):
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(0, 0, 0, 0)
 
+        # Header
         header_bar = QWidget()
         header_bar.setStyleSheet("background: #1c1c22; border-radius: 14px 14px 0 0; border-bottom: 1px solid #2a2a38;")
         header_layout = QHBoxLayout(header_bar)
@@ -77,41 +88,89 @@ class QuickLogPopup(QWidget):
         header_layout.addWidget(lbl_hotkey)
         card_layout.addWidget(header_bar)
 
+        # Body
         body = QWidget()
         body_layout = QVBoxLayout(body)
         body_layout.setContentsMargins(14, 14, 14, 14)
         body_layout.setSpacing(8)
 
-        self._build_favourites(body_layout)
+        # Current running task section
+        self.active_section = QWidget()
+        active_layout = QVBoxLayout(self.active_section)
+        active_layout.setContentsMargins(0, 0, 0, 0)
+        active_layout.setSpacing(6)
 
-        div = QLabel("OR TYPE A NEW TASK")
-        div.setObjectName("sectionLabel")
-        body_layout.addWidget(div)
+        lbl_active = QLabel("NOW RUNNING")
+        lbl_active.setObjectName("activeLabel")
+        active_layout.addWidget(lbl_active)
 
+        self.active_frame = QFrame()
+        self.active_frame.setStyleSheet("""
+            QFrame {
+                background: #1c1c22;
+                border: 1px solid #2a2a38;
+                border-radius: 8px;
+            }
+        """)
+        active_frame_layout = QHBoxLayout(self.active_frame)
+        active_frame_layout.setContentsMargins(12, 8, 12, 8)
+
+        self.lbl_active_dot = QLabel("●")
+        self.lbl_active_dot.setStyleSheet("color: #4ade80; font-size: 8px;")
+        active_frame_layout.addWidget(self.lbl_active_dot)
+
+        self.lbl_active_task = QLabel("")
+        self.lbl_active_task.setStyleSheet("color: #e8e8f0; font-size: 11px;")
+        self.lbl_active_task.setWordWrap(True)
+        active_frame_layout.addWidget(self.lbl_active_task, 1)
+
+        self.lbl_active_elapsed = QLabel("")
+        self.lbl_active_elapsed.setStyleSheet("color: #5a5a72; font-size: 10px;")
+        active_frame_layout.addWidget(self.lbl_active_elapsed)
+
+        active_layout.addWidget(self.active_frame)
+
+        self.btn_end_task = QPushButton("⏹  End Current Task")
+        self.btn_end_task.setObjectName("btnEndTask")
+        self.btn_end_task.clicked.connect(self._on_end_task)
+        active_layout.addWidget(self.btn_end_task)
+
+        body_layout.addWidget(self.active_section)
+
+        # Divider
+        self.div_lbl = QLabel("LOG NEW TASK")
+        self.div_lbl.setObjectName("sectionLabel")
+        body_layout.addWidget(self.div_lbl)
+
+        # Description input
         self.txt_desc = QLineEdit()
         self.txt_desc.setPlaceholderText("What are you working on...")
         body_layout.addWidget(self.txt_desc)
 
-        proj_row = QHBoxLayout()
+        # Project dropdown
         self.cmb_project = QComboBox()
-        self.cmb_project.currentIndexChanged.connect(self._on_project_changed)
+        self.cmb_project.setMinimumWidth(390)
+        self.cmb_project.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         for p in self.projects:
             self.cmb_project.addItem(p["name"], p["id"])
         self.cmb_task = QComboBox()
-        proj_row.addWidget(self.cmb_project, 2)
-        proj_row.addWidget(self.cmb_task, 1)
-        body_layout.addLayout(proj_row)
+        self.cmb_task.setMinimumWidth(390)
+        self.cmb_project.currentIndexChanged.connect(self._on_project_changed)
+        body_layout.addWidget(self.cmb_project)
+        body_layout.addWidget(self.cmb_task)
 
+        # Started at
         started_row = QHBoxLayout()
         lbl = QLabel("Started at:")
         lbl.setObjectName("sectionLabel")
         self.cmb_started = QComboBox()
-        self.cmb_started.setFixedWidth(120)
+        self.cmb_started.setFixedWidth(130)
         started_row.addWidget(lbl)
         started_row.addStretch()
         started_row.addWidget(self.cmb_started)
         body_layout.addLayout(started_row)
 
+        # Buttons
         btn_row = QHBoxLayout()
         self.btn_log = QPushButton("Log It")
         self.btn_log.setObjectName("btnLog")
@@ -130,28 +189,6 @@ class QuickLogPopup(QWidget):
         self._on_project_changed(0)
         self._populate_times()
 
-    def _build_favourites(self, layout):
-        favs = database.get_top_tasks(limit=3)
-        if not favs:
-            return
-        lbl = QLabel("⭐  FAVOURITES")
-        lbl.setObjectName("sectionLabel")
-        layout.addWidget(lbl)
-        for fav in favs:
-            btn = QPushButton(fav["task"])
-            btn.setStyleSheet("""
-                QPushButton { background: #1c1c22; border: 1px solid #2a2a38; border-radius: 7px; color: #9090a8; text-align: left; padding: 7px 10px; font-size: 11px; }
-                QPushButton:hover { border-color: #7c6af7; color: #e8e8f0; background: rgba(124,106,247,0.08); }
-            """)
-            btn.clicked.connect(lambda _, f=fav: self._log_favourite(f))
-            layout.addWidget(btn)
-        layout.addSpacing(4)
-
-    def _log_favourite(self, fav: dict):
-        database.log_entry(project_id=fav["project_id"], project_name=fav["project_name"], task=fav["task"], stopped_at=datetime.now().strftime("%H:%M"))
-        self.logged.emit()
-        self.hide()
-
     def _populate_times(self):
         options = _time_options()
         self.cmb_started.clear()
@@ -159,11 +196,48 @@ class QuickLogPopup(QWidget):
             self.cmb_started.addItem(label, val)
 
     def _on_project_changed(self, index):
+        if not hasattr(self, 'cmb_task'):
+            return
         if index < 0 or index >= len(self.projects):
             return
         self.cmb_task.clear()
         for task in self.projects[index].get("tasks", []):
             self.cmb_task.addItem(task)
+
+    def _refresh_active(self):
+        """Refresh the currently running task display."""
+        active = database.get_active_entry()
+        if active:
+            task = active.get("task", "")
+            if " \u2014 " in task:
+                task = task.split(" \u2014 ", 1)[1]
+            elif " - " in task:
+                task = task.split(" - ", 1)[1]
+            if len(task) > 45:
+                task = task[:45] + "..."
+
+            # Elapsed
+            try:
+                now = datetime.now()
+                start = datetime.strptime(active["start_time"], "%H:%M").replace(
+                    year=now.year, month=now.month, day=now.day
+                )
+                mins = max(0, int((now - start).total_seconds() // 60))
+                elapsed = f"{mins}m" if mins < 60 else f"{mins//60}h {mins%60}m"
+            except Exception:
+                elapsed = ""
+
+            self.lbl_active_task.setText(task)
+            self.lbl_active_elapsed.setText(elapsed)
+            self.active_section.show()
+        else:
+            self.active_section.hide()
+
+    def _on_end_task(self):
+        now = datetime.now().strftime("%H:%M")
+        database.end_current_entry(now)
+        self.task_ended.emit()
+        self.hide()
 
     def _on_log(self):
         desc = self.txt_desc.text().strip()
@@ -171,37 +245,36 @@ class QuickLogPopup(QWidget):
             self.txt_desc.setFocus()
             self.txt_desc.setStyleSheet(self.txt_desc.styleSheet() + "border-color: #f87171;")
             return
-        project = self.projects[self.cmb_project.currentIndex()]
-        task = f"{self.cmb_task.currentText()} — {desc}"
-        database.log_entry(project_id=project["id"], project_name=project["name"], task=task, stopped_at=self.cmb_started.currentData())
+        idx = self.cmb_project.currentIndex()
+        if idx < 0 or idx >= len(self.projects):
+            return
+        project = self.projects[idx]
+        task_type = self.cmb_task.currentText()
+        task = f"{task_type} \u2014 {desc}" if task_type else desc
+        database.log_entry(
+            project_id=project["id"],
+            project_name=project["name"],
+            task=task,
+            stopped_at=self.cmb_started.currentData()
+        )
         self.logged.emit()
         self.txt_desc.clear()
         self.hide()
 
     def showEvent(self, event):
         self._populate_times()
+        self._refresh_active()
         self.txt_desc.clear()
         self.txt_desc.setStyleSheet("")
         self.txt_desc.setFocus()
         super().showEvent(event)
-        self._animate_in()
+        self._position_top_center()
 
-    def _animate_in(self):
+    def _position_top_center(self):
         screen = QApplication.primaryScreen().availableGeometry()
-        end_rect = QRect(screen.width() - self.width() - 16, screen.height() - self.height() - 16, self.width(), self.height())
-        start_rect = QRect(end_rect.x(), end_rect.y() + 30, end_rect.width(), end_rect.height())
-        self.setGeometry(start_rect)
-        anim = QPropertyAnimation(self, b"geometry")
-        anim.setDuration(200)
-        anim.setStartValue(start_rect)
-        anim.setEndValue(end_rect)
-        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-        anim.start()
-        self._anim = anim
-
-    def _position_bottom_right(self):
-        screen = QApplication.primaryScreen().availableGeometry()
-        self.move(screen.width() - self.width() - 16, screen.height() - self.height() - 16)
+        x = (screen.width() - self.width()) // 2
+        y = 50
+        self.move(x, y)
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:

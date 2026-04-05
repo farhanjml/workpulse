@@ -4,6 +4,7 @@ Reads/writes config from AppData\Local\WorkPulse\config.env
 """
 
 import os
+import sys
 import json
 from pathlib import Path
 from dotenv import dotenv_values, set_key
@@ -28,8 +29,19 @@ DEFAULTS = {
     "WINDOW_TRACKING": "false",
     "CLIPBOARD_HINTS": "true",
     "CLOCKIFY_API_KEY": "",
-    "CLOCKIFY_WORKSPACE_ID": "",
+    "CLOCKIFY_WORKSPACE_ID": "682c279d9eb4d30a38976325",
+    "STATUS_BAR_DURATION": "10",
 }
+
+
+def get_base_dir() -> Path:
+    """Get the base directory — works both for .py and .exe (PyInstaller)."""
+    if getattr(sys, "frozen", False):
+        # Running as PyInstaller .exe
+        return Path(sys._MEIPASS)
+    else:
+        # Running as normal Python script
+        return Path(__file__).parent.parent
 
 
 def ensure_app_dir():
@@ -72,6 +84,10 @@ def get_bool(key: str) -> bool:
 
 
 def load_projects() -> list:
-    projects_file = Path(__file__).parent.parent / "data" / "projects.json"
-    with open(projects_file, "r") as f:
-        return json.load(f)
+    projects_file = get_base_dir() / "data" / "projects.json"
+    try:
+        with open(projects_file, "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        # Fallback — return empty list so app doesn't crash
+        return []

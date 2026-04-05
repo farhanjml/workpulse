@@ -4,10 +4,11 @@ All log entries stored in AppData\Local\WorkPulse\workpulse.db
 """
 
 import sqlite3
+import threading
+import requests
 from datetime import datetime, date
-from pathlib import Path
 from contextlib import contextmanager
-from core.config import DB_FILE, ensure_app_dir
+from core.config import DB_FILE, ensure_app_dir, load_projects, get
 
 
 def get_connection():
@@ -34,22 +35,22 @@ def init_db():
     with db() as conn:
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS entries (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                date        TEXT NOT NULL,
-                start_time  TEXT NOT NULL,
-                end_time    TEXT,
-                project_id  TEXT NOT NULL,
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                date         TEXT NOT NULL,
+                start_time   TEXT NOT NULL,
+                end_time     TEXT,
+                project_id   TEXT NOT NULL,
                 project_name TEXT NOT NULL,
-                task        TEXT NOT NULL,
-                notes       TEXT DEFAULT '',
-                is_break    INTEGER DEFAULT 0,
-                created_at  TEXT DEFAULT (datetime('now', 'localtime'))
+                task         TEXT NOT NULL,
+                notes        TEXT DEFAULT '',
+                is_break     INTEGER DEFAULT 0,
+                created_at   TEXT DEFAULT (datetime('now', 'localtime'))
             );
 
             CREATE TABLE IF NOT EXISTS day_meta (
-                date        TEXT PRIMARY KEY,
-                work_start  TEXT,
-                created_at  TEXT DEFAULT (datetime('now', 'localtime'))
+                date       TEXT PRIMARY KEY,
+                work_start TEXT,
+                created_at TEXT DEFAULT (datetime('now', 'localtime'))
             );
 
             CREATE INDEX IF NOT EXISTS idx_entries_date ON entries(date);
@@ -87,11 +88,70 @@ def add_entry(project_id, project_name, task, start_time, end_time=None, notes="
         return cursor.lastrowid
 
 
+def _get_clockify_project_id(project_id: str) -> str:
+    projects = load_projects()
+    for p in projects:
+        if p["id"] == project_id:
+            return p.get("clockify_project_id", "")
+    return ""
+
+
+def _clean_task(task: str) -> str:
+    """Strip task type prefix for Clockify. 'Meeting — xyz' → 'xyz'"""
+    if " \u2014 " in task:
+        return task.split(" \u2014 ", 1)[1]
+    if " - " in task:
+        return task.split(" - ", 1)[1]
+    return task
+
+
+def _push_to_clockify(entry: dict, end_time: str):
+    """Push a completed entry to Clockify in background thread."""
+    def _run():
+        try:
+            from core.clockify import create_completed_entry, is_configured
+            if not is_configured():
+                return
+            clockify_pid = _get_clockify_project_id(entry["project_id"])
+            if not clockify_pid:
+                print(f"[Clockify] No mapping for {entry['project_id']}")
+                return
+            create_completed_entry(
+                project_id=clockify_pid,
+                description=_clean_task(entry["task"]),
+                start_time=entry["start_time"],
+                end_time=end_time,
+                entry_date=entry["date"],
+            )
+        except Exception as e:
+            print(f"[Clockify] Push error: {e}")
+    threading.Thread(target=_run, daemon=True).start()
+
+
 def log_entry(project_id, project_name, task, stopped_at=None, notes="") -> int:
     now = datetime.now().strftime("%H:%M")
     start_time = stopped_at or now
+    today = date.today().isoformat()
+
+    # Get active entry before closing it
+    active = get_active_entry()
+
+    # Close active entry at start_time
     close_active_entry(start_time)
-    return add_entry(project_id=project_id, project_name=project_name, task=task, start_time=start_time, notes=notes)
+
+    # Push closed entry to Clockify as completed
+    if active and not active.get("is_break"):
+        _push_to_clockify(active, start_time)
+
+    # Open new entry
+    return add_entry(
+        project_id=project_id,
+        project_name=project_name,
+        task=task,
+        start_time=start_time,
+        notes=notes,
+        today=today
+    )
 
 
 def extend_active_entry():
@@ -100,7 +160,10 @@ def extend_active_entry():
 
 def end_current_entry(stopped_at=None):
     stopped_at = stopped_at or datetime.now().strftime("%H:%M")
+    active = get_active_entry()
     close_active_entry(stopped_at)
+    if active and not active.get("is_break"):
+        _push_to_clockify(active, stopped_at)
 
 
 def get_entries_for_date(target_date=None) -> list[dict]:

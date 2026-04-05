@@ -36,8 +36,8 @@ PROJECT_COLORS = {
 
 SHORT_NAMES = {
     "Internal - RDRS": "Int·RDRS",
-    "Malayan Banking Bhd - RDRS Implementation": "MBB·Impl",
-    "Malayan Banking Bhd - RDRS Presales": "MBB·Pre",
+    "Maybank MY - RDRS Implementation": "MBB·Impl",
+    "Maybank MY - RDRS Presales": "MBB·Pre",
     "Maybank Singapore Limited - RDRS Presales": "MBS·Pre",
     "RHB Bank Bhd - RDRS Presales": "RHB·Pre",
     "Internal - AI Exploration": "Int·AI",
