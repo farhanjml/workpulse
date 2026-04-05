@@ -10,17 +10,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from core import database
-
-STYLE = """
-QWidget { background: #0d0d0f; color: #e8e8f0; font-family: 'JetBrains Mono', monospace; }
-QScrollArea { border: none; background: transparent; }
-QScrollBar:vertical { background: #1c1c22; width: 6px; border-radius: 3px; }
-QScrollBar::handle:vertical { background: #353545; border-radius: 3px; }
-QPushButton { border-radius: 7px; font-size: 11px; font-family: 'JetBrains Mono', monospace; padding: 8px 14px; border: 1px solid #2a2a38; background: #1c1c22; color: #9090a8; }
-QPushButton:hover { color: #e8e8f0; }
-QPushButton#btnPrimary { background: #7c6af7; border-color: #7c6af7; color: white; }
-QPushButton#btnPrimary:hover { background: #9d8fff; }
-"""
+from ui.theme import get_colors, base_stylesheet
 
 PROJECT_COLORS = {
     "internal_rdrs":       ("#7c6af7", "#1a1630"),
@@ -67,7 +57,8 @@ class EntryRow(QFrame):
     def __init__(self, entry, on_edit, on_delete, parent=None):
         super().__init__(parent)
         self.entry = entry
-        self.setStyleSheet("QFrame { background: transparent; border-radius: 8px; } QFrame:hover { background: #1c1c22; }")
+        c = get_colors()
+        self.setStyleSheet(f"QFrame {{ background: transparent; border-radius: 8px; }} QFrame:hover {{ background: {c['s2']}; }}")
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 8)
         layout.setSpacing(10)
@@ -113,7 +104,8 @@ class EntryRow(QFrame):
 class GapRow(QFrame):
     def __init__(self, start, end, parent=None):
         super().__init__(parent)
-        self.setStyleSheet("QFrame { background: rgba(248,113,113,0.06); border: 1px solid rgba(248,113,113,0.2); border-radius: 8px; }")
+        c = get_colors()
+        self.setStyleSheet(f"QFrame {{ background: {c['red_bg']}; border: 1px solid {c['red_border']}; border-radius: 8px; }}")
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 8)
         lbl = QLabel(f"⚠  {start} – {end}  ·  Unaccounted gap")
@@ -146,13 +138,26 @@ class SummaryWindow(QWidget):
         self.current_date = date.today().isoformat()
         self._setup_window()
         self._setup_ui()
+        self._apply_theme()
         self.refresh()
+
+    def _apply_theme(self):
+        c = get_colors()
+        self.setStyleSheet(base_stylesheet(c) + f"""
+            QWidget#toolbar {{
+                background: {c['s1']};
+                border-bottom: 1px solid {c['border']};
+            }}
+            QWidget#footer {{
+                background: {c['s1']};
+                border-top: 1px solid {c['border']};
+            }}
+        """)
 
     def _setup_window(self):
         self.setWindowTitle("WorkPulse — Today's Log")
         self.setMinimumSize(620, 500)
         self.resize(680, 600)
-        self.setStyleSheet(STYLE)
         self.setWindowFlags(Qt.WindowType.Window)
 
     def _setup_ui(self):
@@ -161,7 +166,7 @@ class SummaryWindow(QWidget):
         layout.setSpacing(0)
 
         toolbar = QWidget()
-        toolbar.setStyleSheet("background: #1c1c22; border-bottom: 1px solid #2a2a38;")
+        toolbar.setObjectName("toolbar")
         toolbar.setFixedHeight(52)
         tb_layout = QHBoxLayout(toolbar)
         tb_layout.setContentsMargins(16, 0, 16, 0)
@@ -204,7 +209,7 @@ class SummaryWindow(QWidget):
         layout.addWidget(self.scroll, 1)
 
         footer = QWidget()
-        footer.setStyleSheet("background: #1c1c22; border-top: 1px solid #2a2a38;")
+        footer.setObjectName("footer")
         footer.setFixedHeight(52)
         ft_layout = QHBoxLayout(footer)
         ft_layout.setContentsMargins(16, 0, 16, 0)

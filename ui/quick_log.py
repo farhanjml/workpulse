@@ -13,26 +13,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QPropertyAnimation, QEasingCurve, QRect
 
 from core import database
 from core.config import load_projects
-
-STYLE = """
-QWidget { background: #141418; color: #e8e8f0; font-family: 'JetBrains Mono', monospace; }
-QLineEdit { background: #1c1c22; border: 1px solid #2a2a38; border-radius: 7px; padding: 8px 12px; font-size: 12px; color: #e8e8f0; }
-QLineEdit:focus { border-color: #7c6af7; }
-QComboBox { background: #1c1c22; border: 1px solid #2a2a38; border-radius: 7px; padding: 7px 10px; font-size: 11px; color: #9090a8; }
-QComboBox:focus { border-color: #7c6af7; }
-QComboBox::drop-down { border: none; width: 20px; }
-QComboBox QAbstractItemView { background: #1c1c22; color: #e8e8f0; selection-background-color: #7c6af7; min-width: 300px; }
-QPushButton { border-radius: 7px; font-size: 12px; font-weight: 600; padding: 9px; border: none; }
-QPushButton#btnLog { background: #7c6af7; color: white; }
-QPushButton#btnLog:hover { background: #9d8fff; }
-QPushButton#btnCancel { background: #1c1c22; border: 1px solid #2a2a38; color: #5a5a72; }
-QPushButton#btnCancel:hover { color: #9090a8; }
-QPushButton#btnEndTask { background: #2a1a1a; border: 1px solid #f87171; color: #f87171; border-radius: 7px; padding: 8px 12px; font-size: 11px; }
-QPushButton#btnEndTask:hover { background: rgba(248,113,113,0.15); }
-QLabel#header { font-size: 10px; color: #5a5a72; letter-spacing: 2px; }
-QLabel#sectionLabel { font-size: 10px; color: #5a5a72; letter-spacing: 1px; }
-QLabel#activeLabel { font-size: 10px; color: #5a5a72; letter-spacing: 1px; }
-"""
+from ui.theme import get_colors, base_stylesheet
 
 
 def _time_options(minutes_back: int = 90) -> list:
@@ -55,6 +36,33 @@ class QuickLogPopup(QWidget):
         self._setup_window()
         self._setup_ui()
 
+    def _apply_theme(self):
+        c = get_colors()
+        self.setStyleSheet(base_stylesheet(c) + f"""
+            QFrame#card {{
+                background: {c['s0']};
+                border: 1px solid {c['border']};
+                border-radius: 14px;
+            }}
+            QWidget#header {{
+                background: {c['s1']};
+                border-radius: 14px 14px 0 0;
+                border-bottom: 1px solid {c['border']};
+            }}
+            QFrame#activeFrame {{
+                background: {c['s1']};
+                border: 1px solid {c['border']};
+                border-radius: 8px;
+            }}
+            QPushButton#btnEndTask {{
+                background: {c['red_bg']};
+                border: 1px solid {c['red_border']};
+                color: {c['red']};
+                text-align: left;
+            }}
+            QPushButton#btnEndTask:hover {{ background: rgba(252,165,165,0.13); }}
+        """)
+
     def _setup_window(self):
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
@@ -63,20 +71,19 @@ class QuickLogPopup(QWidget):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setFixedWidth(420)
-        self.setStyleSheet(STYLE)
 
     def _setup_ui(self):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
 
         card = QFrame()
-        card.setStyleSheet("QFrame { background: #141418; border: 1px solid #353545; border-radius: 14px; }")
+        card.setObjectName("card")
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(0, 0, 0, 0)
 
         # Header
         header_bar = QWidget()
-        header_bar.setStyleSheet("background: #1c1c22; border-radius: 14px 14px 0 0; border-bottom: 1px solid #2a2a38;")
+        header_bar.setObjectName("header")
         header_layout = QHBoxLayout(header_bar)
         header_layout.setContentsMargins(14, 10, 14, 10)
         lbl_header = QLabel("WORKPULSE · QUICK LOG")
@@ -105,13 +112,7 @@ class QuickLogPopup(QWidget):
         active_layout.addWidget(lbl_active)
 
         self.active_frame = QFrame()
-        self.active_frame.setStyleSheet("""
-            QFrame {
-                background: #1c1c22;
-                border: 1px solid #2a2a38;
-                border-radius: 8px;
-            }
-        """)
+        self.active_frame.setObjectName("activeFrame")
         active_frame_layout = QHBoxLayout(self.active_frame)
         active_frame_layout.setContentsMargins(12, 8, 12, 8)
 
@@ -262,6 +263,7 @@ class QuickLogPopup(QWidget):
         self.hide()
 
     def showEvent(self, event):
+        self._apply_theme()
         self._populate_times()
         self._refresh_active()
         self.txt_desc.clear()
