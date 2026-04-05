@@ -33,6 +33,8 @@ desktop.ini
 # Projects config — contains client names, keep local only
 data/projects.json
 
-# Markdown files — local only (except design docs)
+# Markdown files — local only
 *.md
-!docs/**/*.md
+
+# Internal planning/superpowers docs — local only
+docs/superpowers/
