@@ -36,20 +36,24 @@ export function registerIpc({ timer, windows, tray }) {
   ipcMain.handle('db:log-entry', (_e, data) => {
     const id = db.logEntry(data)
     timer.onUserLogged()
+    windows.refreshStatusBar()
     clockify.pushAllUnsynced()
     return id
   })
   ipcMain.handle('db:extend-active', () => {
     db.extendActiveEntry()
     timer.onUserLogged()
+    windows.refreshStatusBar()
   })
   ipcMain.handle('db:end-current', (_e, endTime) => {
     db.endCurrentEntry(endTime)
     timer.onUserLogged()
+    windows.refreshStatusBar()
     clockify.pushAllUnsynced()
   })
   ipcMain.handle('db:log-interrupt', (_e, data) => {
     const id = db.logInterrupt(data)
+    windows.refreshStatusBar()
     clockify.pushAllUnsynced()
     return id
   })

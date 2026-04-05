@@ -54,7 +54,7 @@ function createWindow(name, opts) {
   }
   const win = new BrowserWindow({ ...base, ...opts })
   win.loadURL(winURL(name))
-  win.on('close', (e) => { e.preventDefault(); win.hide() })
+  win.on('close', (e) => { if (isQuitting) return; e.preventDefault(); win.hide() })
   wins[name] = win
   return win
 }
@@ -254,7 +254,10 @@ class WorkPulse {
   }
 
   showQuickLog() {
-    if (!this.quickWin || this.quickWin.isDestroyed()) return
+    if (!this.quickWin || this.quickWin.isDestroyed()) {
+      writeLog('warn', 'quickWin destroyed — recreating')
+      this.quickWin = createWindow('quick', { width: 420, minHeight: 280, maxWidth: 420 })
+    }
     centerTop(this.quickWin, 50)
     this.quickWin.show()
     this.quickWin.focus()
@@ -262,7 +265,10 @@ class WorkPulse {
   }
 
   showInterrupt() {
-    if (!this.interruptWin || this.interruptWin.isDestroyed()) return
+    if (!this.interruptWin || this.interruptWin.isDestroyed()) {
+      writeLog('warn', 'interruptWin destroyed — recreating')
+      this.interruptWin = createWindow('interrupt', { width: 380, minHeight: 280, maxWidth: 380 })
+    }
     centerTop(this.interruptWin)
     this.interruptWin.show()
     this.interruptWin.focus()
@@ -276,6 +282,9 @@ class WorkPulse {
 }
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
+let isQuitting = false
+app.on('before-quit', () => { isQuitting = true })
+
 app.whenReady().then(() => {
   app.setAppUserModelId('com.dotdash.workpulse')
   const wp = new WorkPulse()
