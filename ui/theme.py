@@ -3,7 +3,7 @@ ui/theme.py — Dotdash design tokens and font loader.
 Import DARK, LIGHT, or call get_colors(mode) in each UI file.
 """
 
-from PyQt6.QtGui import QFontDatabase, QFont
+from PyQt6.QtGui import QFontDatabase
 from core.config import get_bool
 import os, sys
 
