@@ -90,9 +90,10 @@ function buildTrayIcon() {
 
 function buildTrayMenu(appRef) {
   return Menu.buildFromTemplate([
-    { label: 'View Log',  click: () => { appRef.summaryWin?.show(); appRef.summaryWin?.focus(); sendToWin('summary', 'refresh') } },
-    { label: 'Quick Log', click: () => appRef.showQuickLog() },
-    { label: 'End Task',  click: () => { endCurrentEntry(); appRef.timer.onUserLogged(); appRef.refreshStatusBar() } },
+    { label: 'View Log',    click: () => { appRef.summaryWin?.show(); appRef.summaryWin?.focus(); sendToWin('summary', 'refresh') } },
+    { label: 'Quick Log',   click: () => appRef.showQuickLog() },
+    { label: 'End Task',    click: () => { endCurrentEntry(); appRef.timer?.onUserLogged(); appRef.refreshStatusBar() } },
+    { label: 'Fire Ping',   click: () => appRef._firePing() },
     { type: 'separator' },
     { label: 'Settings',  click: () => { appRef.settingsWin?.show(); appRef.settingsWin?.focus() } },
     { type: 'separator' },
@@ -127,7 +128,7 @@ class WorkPulse {
     this._setupHotkeys()
     this._setupTimer()
     this._setupEodTimer()
-    registerIpc({ timer: this.timer, windows: this, tray })
+    registerIpc({ getTimer: () => this.timer, windows: this, tray })
 
     if (isConfigured()) syncProjectsToCache().catch(() => {})
 
@@ -268,6 +269,12 @@ class WorkPulse {
   refreshStatusBar() {
     sendToWin('statusbar', 'state', 'active')
     sendToWin('statusbar', 'refresh')
+  }
+
+  broadcastTheme(isDark) {
+    for (const name of Object.keys(wins)) {
+      sendToWin(name, 'theme', isDark)
+    }
   }
 }
 

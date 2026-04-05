@@ -12,15 +12,14 @@ import StatusBar   from './windows/StatusBar'
 const WINDOWS = { ping: PingPopup, quick: QuickLog, interrupt: Interrupt, summary: Summary, settings: Settings, statusbar: StatusBar }
 
 function App() {
-  const [theme, setTheme] = useState('dark')
-
   useEffect(() => {
-    // Load theme from config
     window.api.getConfig().then(cfg => {
-      const t = cfg.DARK_MODE ? 'dark' : 'light'
-      setTheme(t)
-      document.documentElement.setAttribute('data-theme', t)
+      document.documentElement.setAttribute('data-theme', cfg.DARK_MODE ? 'dark' : 'light')
     })
+    const off = window.api.on('theme', (isDark) => {
+      document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light')
+    })
+    return () => off?.()
   }, [])
 
   const params = new URLSearchParams(window.location.search)

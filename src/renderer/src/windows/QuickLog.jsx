@@ -1,5 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 
+function ThemeToggle() {
+  const [dark, setDark] = useState(document.documentElement.getAttribute('data-theme') !== 'light')
+  const toggle = async () => { const isDark = await window.api.toggleTheme(); setDark(isDark) }
+  return (
+    <button onClick={toggle} className="no-drag" title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--t3)', padding: '0 2px', lineHeight: 1 }}>
+      {dark ? '☀' : '🌙'}
+    </button>
+  )
+}
+
 function timeOptions(minutesBack = 90) {
   const now = new Date()
   const opts = []
@@ -92,6 +103,7 @@ export default function QuickLog() {
         <div className="card-header drag">
           <span className="label-xs" style={{ flex: 1 }}>WORKPULSE · QUICK LOG</span>
           <span style={{ fontSize: 10, color: 'var(--t3)', fontFamily: 'monospace' }}>{hotkey}</span>
+          <ThemeToggle />
         </div>
 
         <div style={{ padding: '14px 14px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>

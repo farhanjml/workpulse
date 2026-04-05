@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('api', {
   // Config
   getConfig:    ()       => ipcRenderer.invoke('config:get-all'),
   saveConfig:   (data)   => ipcRenderer.invoke('config:save', data),
+  toggleTheme:  ()       => ipcRenderer.invoke('config:toggle-theme'),
 
   // Projects
   getProjects:     ()        => ipcRenderer.invoke('projects:load'),

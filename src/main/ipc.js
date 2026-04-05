@@ -1,17 +1,20 @@
 import { ipcMain } from 'electron'
 import * as db from './database.js'
 import * as clockify from './clockify.js'
-import { get, getAll, saveAll } from './config.js'
+import { get, set, getAll, saveAll } from './config.js'
 
-export function registerIpc({ timer, windows, tray }) {
+export function registerIpc({ getTimer, windows, tray }) {
   // ── Config ────────────────────────────────────────────────────────────────
   ipcMain.handle('config:get-all', () => getAll())
   ipcMain.handle('config:save', (_e, updates) => {
     saveAll(updates)
-    // Re-register hotkeys if changed
-    if (updates.HOTKEY || updates.INTERRUPT_HOTKEY) {
-      windows.reregisterHotkeys()
-    }
+    if (updates.HOTKEY || updates.INTERRUPT_HOTKEY) windows.reregisterHotkeys()
+  })
+  ipcMain.handle('config:toggle-theme', () => {
+    const isDark = !get('DARK_MODE')
+    set('DARK_MODE', isDark)
+    windows.broadcastTheme(isDark)
+    return isDark
   })
 
   // ── Projects ──────────────────────────────────────────────────────────────
@@ -35,19 +38,19 @@ export function registerIpc({ timer, windows, tray }) {
   ipcMain.handle('db:get-active', () => db.getActiveEntry())
   ipcMain.handle('db:log-entry', (_e, data) => {
     const id = db.logEntry(data)
-    timer.onUserLogged()
+    getTimer()?.onUserLogged()
     windows.refreshStatusBar()
     clockify.pushAllUnsynced()
     return id
   })
   ipcMain.handle('db:extend-active', () => {
     db.extendActiveEntry()
-    timer.onUserLogged()
+    getTimer()?.onUserLogged()
     windows.refreshStatusBar()
   })
   ipcMain.handle('db:end-current', (_e, endTime) => {
     db.endCurrentEntry(endTime)
-    timer.onUserLogged()
+    getTimer()?.onUserLogged()
     windows.refreshStatusBar()
     clockify.pushAllUnsynced()
   })

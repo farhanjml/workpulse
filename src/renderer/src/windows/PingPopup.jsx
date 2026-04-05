@@ -7,8 +7,7 @@ function timeOptions(minutesBack = 90) {
     const t = new Date(now - i * 60000)
     const hh = String(t.getHours()).padStart(2, '0')
     const mm = String(t.getMinutes()).padStart(2, '0')
-    const val = `${hh}:${mm}`
-    opts.push({ value: val, label: val + (i === 0 ? ' (now)' : '') })
+    opts.push({ value: `${hh}:${mm}`, label: `${hh}:${mm}${i === 0 ? ' (now)' : ''}` })
   }
   return opts
 }
@@ -19,24 +18,42 @@ function elapsed(startTime) {
   const [h, m] = startTime.split(':').map(Number)
   const start = new Date(now); start.setHours(h, m, 0, 0)
   const mins = Math.max(0, Math.floor((now - start) / 60000))
-  return mins < 60 ? `${mins}m` : `${Math.floor(mins/60)}h ${mins%60}m`
+  return mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`
+}
+
+function ThemeToggle() {
+  const [dark, setDark] = useState(document.documentElement.getAttribute('data-theme') !== 'light')
+  const toggle = async () => {
+    const isDark = await window.api.toggleTheme()
+    setDark(isDark)
+  }
+  return (
+    <button
+      onClick={toggle}
+      className="no-drag"
+      title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--t3)', padding: '0 2px', lineHeight: 1 }}
+    >
+      {dark ? '☀' : '🌙'}
+    </button>
+  )
 }
 
 export default function PingPopup() {
-  const [projects, setProjects] = useState([])
-  const [tasks, setTasks] = useState([])
+  const [projects, setProjects]       = useState([])
+  const [tasks, setTasks]             = useState([])
   const [selectedProj, setSelectedProj] = useState(0)
   const [selectedTask, setSelectedTask] = useState(0)
-  const [desc, setDesc] = useState('')
+  const [desc, setDesc]               = useState('')
   const [activeEntry, setActiveEntry] = useState(null)
-  const [count, setCount] = useState(0)
-  const [countdown, setCountdown] = useState(60)
-  const [times, setTimes] = useState([])
-  const [endTime, setEndTime] = useState('')
-  const [startedAt, setStartedAt] = useState('')
-  const descRef = useRef(null)
-  const dismissTimer = useRef(null)
-  const countdownTimer = useRef(null)
+  const [count, setCount]             = useState(0)
+  const [countdown, setCountdown]     = useState(60)
+  const [times, setTimes]             = useState([])
+  const [endTime, setEndTime]         = useState('')
+  const [startedAt, setStartedAt]     = useState('')
+  const descRef       = useRef(null)
+  const dismissTimer  = useRef(null)
+  const countdownInt  = useRef(null)
 
   const refresh = useCallback(async () => {
     const [projs, active, cnt] = await Promise.all([
@@ -52,11 +69,13 @@ export default function PingPopup() {
     setTimes(opts)
     setEndTime(opts[0]?.value || '')
     setStartedAt(opts[0]?.value || '')
+    setDesc('')
     setCountdown(60)
     clearTimeout(dismissTimer.current)
-    clearInterval(countdownTimer.current)
+    clearInterval(countdownInt.current)
     dismissTimer.current = setTimeout(() => window.close?.(), 60000)
-    countdownTimer.current = setInterval(() => setCountdown(c => c > 0 ? c - 1 : 0), 1000)
+    countdownInt.current = setInterval(() => setCountdown(c => c > 0 ? c - 1 : 0), 1000)
+    setTimeout(() => descRef.current?.focus(), 50)
   }, [])
 
   useEffect(() => {
@@ -64,10 +83,9 @@ export default function PingPopup() {
     const off = window.api.on('refresh', refresh)
     const onKey = (e) => {
       if (e.key === 'Escape') window.close?.()
-      if ((e.key === 'Enter') && document.activeElement === descRef.current) onLog()
     }
     window.addEventListener('keydown', onKey)
-    return () => { off?.(); clearTimeout(dismissTimer.current); clearInterval(countdownTimer.current); window.removeEventListener('keydown', onKey) }
+    return () => { off?.(); clearTimeout(dismissTimer.current); clearInterval(countdownInt.current); window.removeEventListener('keydown', onKey) }
   }, [refresh])
 
   const onProjChange = (idx) => {
@@ -101,20 +119,23 @@ export default function PingPopup() {
   return (
     <div style={{ padding: 0 }}>
       <div className="card" style={{ width: 400 }}>
+
         {/* Header */}
         <div className="card-header drag">
           <span style={{ color: '#4ade80', fontSize: 8 }}>●</span>
           <span className="label-xs" style={{ flex: 1 }}>WORKPULSE · PING</span>
-          {hasActive
-            ? <span style={{ fontSize: 10, color: 'var(--gold-dim)', fontFamily: 'monospace' }}>🔥 {count} entries</span>
-            : <span style={{ fontSize: 10, color: 'var(--gold-dim)' }}>✦ Day start</span>
-          }
+          <span style={{ fontSize: 10, color: 'var(--t3)', fontFamily: 'monospace' }}>
+            {count > 0 ? `${count} entries` : 'day start'}
+          </span>
+          <ThemeToggle />
         </div>
 
-        <div style={{ padding: '14px 14px 16px' }}>
-          {/* Active task section */}
+        <div style={{ padding: '14px 14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+          {/* Current task — shown when active */}
           {hasActive && (
-            <div style={{ marginBottom: 10 }}>
+            <div>
+              <div className="label-xs" style={{ marginBottom: 6 }}>NOW RUNNING</div>
               <div className="chip" style={{ marginBottom: 8 }}>
                 <span style={{ color: '#4ade80', fontSize: 8 }}>●</span>
                 <div style={{ flex: 1 }}>
@@ -123,17 +144,13 @@ export default function PingPopup() {
                   </div>
                   <div style={{ fontSize: 10, color: 'var(--t3)' }}>{activeEntry.project_name}</div>
                 </div>
-                <span style={{ fontSize: 10, color: 'var(--gold-dim)', fontFamily: 'monospace' }}>
-                  {elapsed(activeEntry.start_time)}
-                </span>
+                <span style={{ fontSize: 10, color: 'var(--t3)', fontFamily: 'monospace' }}>{elapsed(activeEntry.start_time)}</span>
               </div>
-              <button className="btn btn-green no-drag" style={{ width: '100%', marginBottom: 8 }} onClick={onStillOn}>
+              <button className="btn btn-green no-drag" style={{ width: '100%', marginBottom: 6 }} onClick={onStillOn}>
                 ✓  Still on it — keep going
               </button>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button className="btn btn-red no-drag" style={{ flex: 1 }} onClick={onEndTask}>
-                  ⏹  Done with this task
-                </button>
+                <button className="btn btn-red no-drag" style={{ flex: 1 }} onClick={onEndTask}>⏹  Done with this task</button>
                 <span style={{ fontSize: 10, color: 'var(--t3)' }}>ended at</span>
                 <select className="select no-drag" value={endTime} onChange={e => setEndTime(e.target.value)} style={{ width: 110 }}>
                   {times.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -142,51 +159,44 @@ export default function PingPopup() {
             </div>
           )}
 
-          {/* First-ping hero */}
-          {!hasActive && (
-            <div style={{ textAlign: 'center', padding: '4px 0 10px' }}>
-              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 2, color: 'var(--gold-dim)', marginBottom: 2 }}>
-                Good morning, {window._userName || 'there'}
-              </div>
-              <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--t1)', marginBottom: 2 }}>What are you starting with?</div>
-              <div style={{ fontSize: 11, color: 'var(--t2)' }}>Log your first task to kick off the day</div>
-            </div>
-          )}
-
           {/* Divider */}
-          {hasActive && (
-            <div className="label-xs" style={{ marginBottom: 8 }}>OR SWITCHED TO SOMETHING NEW</div>
-          )}
+          <div className="label-xs">{hasActive ? 'OR SWITCHED TO SOMETHING NEW' : 'WHAT ARE YOU WORKING ON?'}</div>
 
           {/* New task form */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <input ref={descRef} className="input no-drag" placeholder="What are you working on..." value={desc} onChange={e => setDesc(e.target.value)} autoFocus />
-            <select className="select no-drag" value={selectedProj} onChange={e => onProjChange(Number(e.target.value))}>
-              {projects.map((p, i) => <option key={p.id} value={i}>{p.name}</option>)}
+          <input
+            ref={descRef}
+            className="input no-drag"
+            placeholder="What are you working on..."
+            value={desc}
+            onChange={e => setDesc(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') onLog() }}
+            autoFocus
+          />
+          <select className="select no-drag" value={selectedProj} onChange={e => onProjChange(Number(e.target.value))}>
+            {projects.map((p, i) => <option key={p.id} value={i}>{p.name}</option>)}
+          </select>
+          {tasks.length > 0 && (
+            <select className="select no-drag" value={selectedTask} onChange={e => setSelectedTask(Number(e.target.value))}>
+              {tasks.map((t, i) => <option key={i} value={i}>{t}</option>)}
             </select>
-            {tasks.length > 0 && (
-              <select className="select no-drag" value={selectedTask} onChange={e => setSelectedTask(Number(e.target.value))}>
-                {tasks.map((t, i) => <option key={i} value={i}>{t}</option>)}
-              </select>
-            )}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 10, color: 'var(--t3)' }}>{hasActive ? 'switched at' : 'started at'}</span>
-              <div style={{ flex: 1 }} />
-              <select className="select no-drag" value={startedAt} onChange={e => setStartedAt(e.target.value)} style={{ width: 110 }}>
-                {times.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn btn-primary no-drag" style={{ flex: 1 }} onClick={onLog}>
-                {hasActive ? 'Log New Task' : 'Start Tracking'}
-              </button>
-              <button className="btn btn-ghost no-drag" style={{ width: 70 }} onClick={() => window.close?.()}>Skip</button>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 9.5, color: 'var(--t3)' }}>Tab · Enter · Esc</span>
-              <span style={{ fontSize: 9.5, color: 'var(--t3)' }}>auto-closing in {countdown}s</span>
-            </div>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 10, color: 'var(--t3)' }}>{hasActive ? 'switched at' : 'started at'}</span>
+            <div style={{ flex: 1 }} />
+            <select className="select no-drag" value={startedAt} onChange={e => setStartedAt(e.target.value)} style={{ width: 110 }}>
+              {times.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
           </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-primary no-drag" style={{ flex: 1 }} onClick={onLog}>
+              {hasActive ? 'Log New Task' : 'Start Tracking'}
+            </button>
+            <button className="btn btn-ghost no-drag" style={{ width: 70 }} onClick={() => window.close?.()}>Skip</button>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <span style={{ fontSize: 9.5, color: 'var(--t3)' }}>auto-close in {countdown}s</span>
+          </div>
+
         </div>
       </div>
     </div>
