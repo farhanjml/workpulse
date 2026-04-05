@@ -118,16 +118,15 @@ export default function Settings() {
 
   const onSync = async () => {
     setSyncStatus('Syncing…')
-    // Pass current (possibly unsaved) credentials so sync works without hitting Save first
-    const ok = await window.api.syncProjects({
+    const result = await window.api.syncProjects({
       CLOCKIFY_API_KEY: cfg.CLOCKIFY_API_KEY,
       CLOCKIFY_WORKSPACE_ID: cfg.CLOCKIFY_WORKSPACE_ID,
     })
-    if (ok) {
+    if (result?.ok) {
       const c = await window.api.getConfig()
-      setSyncStatus(`Last synced: ${c.LAST_CLOCKIFY_SYNC}`)
+      setSyncStatus(`Synced ${result.count} project(s) — ${c.LAST_CLOCKIFY_SYNC}`)
     } else {
-      setSyncStatus('Sync failed — check API key + Workspace ID')
+      setSyncStatus(`Sync failed: ${result?.error || 'unknown error'}`)
     }
   }
 

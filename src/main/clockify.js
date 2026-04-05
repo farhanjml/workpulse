@@ -8,7 +8,7 @@ import { markClockifySynced, getUnsyncedEntries } from './database.js'
 const BASE = 'https://api.clockify.me/api/v1'
 
 function headers() {
-  return { 'X-Api-Key': get('CLOCKIFY_API_KEY'), 'Content-Type': 'application/json' }
+  return { 'X-Api-Key': (get('CLOCKIFY_API_KEY') || '').trim(), 'Content-Type': 'application/json' }
 }
 
 export function isConfigured() {
@@ -96,12 +96,11 @@ export function saveProjects(projects) {
 }
 
 export async function syncProjectsToCache() {
-  if (!isConfigured()) return false
-  const wsId = get('CLOCKIFY_WORKSPACE_ID')
+  if (!isConfigured()) return { ok: false, error: 'API key or Workspace ID is empty' }
+  const wsId = (get('CLOCKIFY_WORKSPACE_ID') || '').trim()
   try {
     const remote = await fetchProjects(wsId)
     const existing = loadProjects()
-    // Build lookup: clockify_project_id → local id
     const idByClockify = {}
     for (const p of existing) {
       if (p.clockify_project_id) idByClockify[p.clockify_project_id] = p.id
@@ -111,17 +110,14 @@ export async function syncProjectsToCache() {
       const localId = idByClockify[rp.id] || slugify(rp.name)
       let tasks = []
       try { tasks = await fetchTasks(wsId, rp.id) } catch {}
-      merged.push({
-        id: localId,
-        name: rp.name,
-        clockify_project_id: rp.id,
-        tasks,
-      })
+      merged.push({ id: localId, name: rp.name, clockify_project_id: rp.id, tasks })
     }
     saveProjects(merged)
     set('LAST_CLOCKIFY_SYNC', new Date().toLocaleString())
-    return true
-  } catch {
-    return false
+    return { ok: true, count: merged.length }
+  } catch (e) {
+    const status = e?.response?.status
+    const msg = e?.response?.data?.message || e?.message || String(e)
+    return { ok: false, error: `HTTP ${status || '?'}: ${msg}` }
   }
 }
