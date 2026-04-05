@@ -1,0 +1,28 @@
+appId: com.dotdash.workpulse
+productName: WorkPulse
+directories:
+  output: C:\BuildOutput\WorkPulse
+  buildResources: assets
+files:
+  - out/**/*
+  - assets/**/*
+  - sounds/**/*
+  - data/**/*
+win:
+  signAndEditExecutable: false
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  oneClick: true
+  shortcutName: WorkPulse
+  runAfterFinish: true
+extraResources:
+  - from: sounds
+    to: sounds
+  - from: assets/fonts
+    to: assets/fonts
+  - from: data
+    to: data
+    filter:
+      - projects.example.json

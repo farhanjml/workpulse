@@ -1,0 +1,186 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Dotdash design tokens ────────────────────────────────────────────── */
+:root, [data-theme="dark"] {
+  --bg:           #030404;
+  --s0:           #080909;
+  --s1:           #0e0f0f;
+  --s2:           #141515;
+  --s3:           #1a1b1b;
+  --border:       rgba(255,255,255,0.055);
+  --border-h:     rgba(255,255,255,0.10);
+  --gold:         #e9bb51;
+  --gold-dim:     rgba(233,187,81,0.6);
+  --gold-bg:      rgba(233,187,81,0.07);
+  --gold-border:  rgba(233,187,81,0.22);
+  --t1:           #f2ede4;
+  --t2:           #8a8478;
+  --t3:           #3d3b37;
+  --green:        #4ade80;
+  --green-bg:     rgba(74,222,128,0.07);
+  --green-border: rgba(74,222,128,0.22);
+  --red:          #fca5a5;
+  --red-bg:       rgba(252,165,165,0.07);
+  --red-border:   rgba(252,165,165,0.22);
+}
+
+[data-theme="light"] {
+  --bg:           #f5f0e8;
+  --s0:           #fffdf8;
+  --s1:           #f9f4ec;
+  --s2:           #f0eade;
+  --s3:           #e8e0d0;
+  --border:       rgba(0,0,0,0.08);
+  --border-h:     rgba(0,0,0,0.14);
+  --gold:         #e9bb51;
+  --gold-dim:     #c9962a;
+  --gold-bg:      rgba(233,187,81,0.12);
+  --gold-border:  rgba(233,187,81,0.4);
+  --t1:           #1a1710;
+  --t2:           #6b6355;
+  --t3:           #b0a898;
+  --green:        #16a34a;
+  --green-bg:     rgba(22,163,74,0.07);
+  --green-border: rgba(22,163,74,0.25);
+  --red:          #dc2626;
+  --red-bg:       rgba(220,38,38,0.06);
+  --red-border:   rgba(220,38,38,0.25);
+}
+
+/* ── Base reset ───────────────────────────────────────────────────────── */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root {
+  height: 100%;
+  background: transparent;
+  font-family: 'Sora', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  color: var(--t1);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--s1); }
+::-webkit-scrollbar-thumb { background: var(--s3); border-radius: 3px; }
+
+/* ── Reusable components ──────────────────────────────────────────────── */
+.card {
+  background: var(--s0);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.card-header {
+  background: var(--s1);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.label-xs {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  color: var(--t3);
+  text-transform: uppercase;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--s2);
+  color: var(--t2);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+  font-family: inherit;
+}
+.btn:hover { color: var(--t1); border-color: var(--border-h); }
+
+.btn-primary {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: #030404;
+}
+.btn-primary:hover { background: #f0c66a; }
+
+.btn-green {
+  background: var(--green-bg);
+  border-color: var(--green-border);
+  color: var(--green);
+  text-align: left;
+  justify-content: flex-start;
+}
+.btn-green:hover { background: rgba(74,222,128,0.13); }
+
+.btn-red {
+  background: var(--red-bg);
+  border-color: var(--red-border);
+  color: var(--red);
+  text-align: left;
+  justify-content: flex-start;
+}
+.btn-red:hover { background: rgba(252,165,165,0.13); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--t3);
+  border-color: transparent;
+}
+.btn-ghost:hover { color: var(--t2); border-color: var(--border); }
+
+.input {
+  width: 100%;
+  background: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 11px;
+  color: var(--t1);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.input:focus { border-color: var(--gold-border); }
+.input::placeholder { color: var(--t3); }
+
+.select {
+  appearance: none;
+  background: var(--s2) url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%238a8478' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 28px 8px 11px;
+  color: var(--t1);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+}
+.select:focus { border-color: var(--gold-border); }
+
+.chip {
+  background: var(--s1);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ── Draggable region for frameless windows ───────────────────────────── */
+.drag { -webkit-app-region: drag; }
+.no-drag { -webkit-app-region: no-drag; }

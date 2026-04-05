@@ -1,20 +1,13 @@
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.egg-info/
-*.spec
+# Node / Electron
+node_modules/
+out/
+dist/
+release/
 
 # Environment — NEVER commit real config
 config.env
 .env
 *.env
-
-# PyInstaller output
-dist/
-build/
 
 # IDE
 .vscode/
