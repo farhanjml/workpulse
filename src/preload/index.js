@@ -7,7 +7,7 @@ contextBridge.exposeInMainWorld('api', {
 
   // Projects
   getProjects:  ()       => ipcRenderer.invoke('projects:load'),
-  syncProjects: ()       => ipcRenderer.invoke('projects:sync'),
+  syncProjects: (cfg)    => ipcRenderer.invoke('projects:sync', cfg),
 
   // Database
   getActive:    ()       => ipcRenderer.invoke('db:get-active'),

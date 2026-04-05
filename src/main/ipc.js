@@ -16,7 +16,11 @@ export function registerIpc({ timer, windows, tray }) {
 
   // ── Projects ──────────────────────────────────────────────────────────────
   ipcMain.handle('projects:load', () => clockify.loadProjects())
-  ipcMain.handle('projects:sync', async () => clockify.syncProjectsToCache())
+  ipcMain.handle('projects:sync', async (_e, partialCfg) => {
+    // Save API credentials before syncing so user doesn't have to hit Save first
+    if (partialCfg) saveAll(partialCfg)
+    return clockify.syncProjectsToCache()
+  })
 
   // ── Database ──────────────────────────────────────────────────────────────
   ipcMain.handle('db:get-active', () => db.getActiveEntry())

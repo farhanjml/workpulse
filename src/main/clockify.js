@@ -77,11 +77,8 @@ function slugify(name) {
 }
 
 function projectsFilePath() {
-  // Use app resources for packaged, repo data/ for dev
-  const base = app.isPackaged
-    ? path.join(process.resourcesPath, 'data')
-    : path.join(app.getAppPath(), 'data')
-  return path.join(base, 'projects.json')
+  // Always use userData so we have write access in both dev and packaged
+  return path.join(app.getPath('userData'), 'projects.json')
 }
 
 export function loadProjects() {

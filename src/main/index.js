@@ -33,7 +33,7 @@ function createWindow(name, opts) {
   }
   const win = new BrowserWindow({ ...base, ...opts })
   win.loadURL(winURL(name))
-  win.on('closed', () => { delete wins[name] })
+  win.on('close', (e) => { e.preventDefault(); win.hide() })
   wins[name] = win
   return win
 }
@@ -154,13 +154,11 @@ class WorkPulse {
       skipTaskbar: false, width: 680, height: 600, minWidth: 620, minHeight: 500,
       show: false,
     })
-    this.summaryWin.on('close', (e) => { e.preventDefault(); this.summaryWin.hide() })
 
     this.settingsWin = createWindow('settings', {
       frame: true, transparent: false, alwaysOnTop: false,
       skipTaskbar: false, width: 480, height: 720, resizable: false, show: false,
     })
-    this.settingsWin.on('close', (e) => { e.preventDefault(); this.settingsWin.hide() })
   }
 
   _setupTray() {
