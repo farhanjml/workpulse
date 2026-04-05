@@ -12,6 +12,27 @@ function timeOptions(minutesBack = 90) {
   return opts
 }
 
+const QUESTIONS = [
+  'What are you starting with?',
+  "What's on your plate right now?",
+  'What are you tackling?',
+  "What's keeping you busy?",
+  'What are you focused on?',
+  'What are you diving into?',
+  "What's on your radar?",
+  'What are you working on?',
+  "What's your current focus?",
+  'What are you getting done?',
+]
+
+function greeting() {
+  const h = new Date().getHours()
+  if (h >= 5 && h < 12) return 'Good morning'
+  if (h >= 12 && h < 17) return 'Good afternoon'
+  if (h >= 17 && h < 21) return 'Good evening'
+  return 'Good night'
+}
+
 function elapsed(startTime) {
   if (!startTime) return ''
   const now = new Date()
@@ -48,6 +69,7 @@ export default function PingPopup() {
   const [activeEntry, setActiveEntry] = useState(null)
   const [count, setCount]             = useState(0)
   const [countdown, setCountdown]     = useState(60)
+  const [question, setQuestion]       = useState(() => QUESTIONS[Math.floor(Math.random() * QUESTIONS.length)])
   const [times, setTimes]             = useState([])
   const [endTime, setEndTime]         = useState('')
   const [startedAt, setStartedAt]     = useState('')
@@ -70,6 +92,7 @@ export default function PingPopup() {
     setEndTime(opts[0]?.value || '')
     setStartedAt(opts[0]?.value || '')
     setDesc('')
+    setQuestion(QUESTIONS[Math.floor(Math.random() * QUESTIONS.length)])
     setCountdown(60)
     clearTimeout(dismissTimer.current)
     clearInterval(countdownInt.current)
@@ -132,6 +155,15 @@ export default function PingPopup() {
 
         <div style={{ padding: '14px 14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
 
+          {/* Greeting — always shown */}
+          <div style={{ textAlign: 'center', paddingBottom: 2 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: 'var(--gold)', textTransform: 'uppercase', marginBottom: 3 }}>
+              {greeting()}
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--t1)', marginBottom: 2 }}>{question}</div>
+            <div style={{ fontSize: 10, color: 'var(--t3)' }}>Log your task for the day</div>
+          </div>
+
           {/* Current task — shown when active */}
           {hasActive && (
             <div>
@@ -160,7 +192,7 @@ export default function PingPopup() {
           )}
 
           {/* Divider */}
-          <div className="label-xs">{hasActive ? 'OR SWITCHED TO SOMETHING NEW' : 'WHAT ARE YOU WORKING ON?'}</div>
+          {hasActive && <div className="label-xs">OR SWITCHED TO SOMETHING NEW</div>}
 
           {/* New task form */}
           <input
