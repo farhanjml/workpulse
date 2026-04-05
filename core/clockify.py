@@ -3,8 +3,11 @@ core/clockify.py — Clockify REST API integration
 Creates completed time entries (with start + end time) — no running timers.
 """
 
+import re
+import json
 import requests
 from datetime import datetime, date, timezone, timedelta
+from pathlib import Path
 from core import config
 
 BASE_URL = "https://api.clockify.me/api/v1"
@@ -90,3 +93,94 @@ def sync_entry(entry: dict, clockify_project_id: str) -> bool:
         end_time=entry["end_time"],
         entry_date=entry["date"],
     )
+
+
+def fetch_projects(workspace_id: str) -> list:
+    """Fetch all active (non-archived) projects from Clockify."""
+    try:
+        resp = requests.get(
+            f"{BASE_URL}/workspaces/{workspace_id}/projects",
+            headers=_headers(),
+            params={"archived": "false", "page-size": 500},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return [p for p in resp.json() if not p.get("archived", False)]
+    except Exception as e:
+        print(f"[Clockify] fetch_projects error: {e}")
+        return []
+
+
+def fetch_tasks(workspace_id: str, project_id: str) -> list:
+    """Return task names for a project (active tasks only)."""
+    try:
+        resp = requests.get(
+            f"{BASE_URL}/workspaces/{workspace_id}/projects/{project_id}/tasks",
+            headers=_headers(),
+            params={"status": "ACTIVE", "page-size": 200},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return [t["name"] for t in resp.json() if t.get("status") == "ACTIVE"]
+    except Exception as e:
+        print(f"[Clockify] fetch_tasks error: {e}")
+        return []
+
+
+def _slugify(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+
+
+def _load_cached_projects() -> list:
+    from core.config import get_base_dir
+    path = get_base_dir() / "data" / "projects.json"
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return []
+
+
+def _save_projects_cache(projects: list):
+    from core.config import get_base_dir
+    path = get_base_dir() / "data" / "projects.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(projects, f, indent=2)
+
+
+def sync_projects_to_cache() -> bool:
+    """
+    Fetch projects+tasks from Clockify and write to data/projects.json.
+    Preserves existing local 'id' slugs where clockify_project_id matches.
+    Returns True on success, False on failure.
+    """
+    if not is_configured():
+        return False
+
+    workspace_id = config.get("CLOCKIFY_WORKSPACE_ID", WORKSPACE_ID)
+    raw_projects = fetch_projects(workspace_id)
+    if not raw_projects:
+        return False
+
+    existing = _load_cached_projects()
+    id_by_clockify = {p["clockify_project_id"]: p["id"]
+                      for p in existing if p.get("clockify_project_id")}
+
+    result = []
+    for rp in raw_projects:
+        cid = rp["id"]
+        local_id = id_by_clockify.get(cid) or _slugify(rp["name"])
+        tasks = fetch_tasks(workspace_id, cid)
+        result.append({
+            "id": local_id,
+            "name": rp["name"],
+            "clockify_project_id": cid,
+            "tasks": tasks,
+        })
+
+    _save_projects_cache(result)
+
+    config.set("LAST_CLOCKIFY_SYNC", datetime.now().strftime("%Y-%m-%d %H:%M"))
+    print(f"[Clockify] Synced {len(result)} projects")
+    return True
