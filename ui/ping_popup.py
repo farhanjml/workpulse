@@ -1,6 +1,6 @@
 """
-ui/ping_popup.py — 15-minute ping popup
-Three clear options: Still on it / End this task / Switch to new task
+ui/ping_popup.py — 15-minute ping popup.
+Shows 'Good morning' variant when no task is active.
 """
 
 from datetime import datetime, timedelta
@@ -10,22 +10,9 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 
-from core import database
+from core import database, config
 from core.config import load_projects
-
-STYLE = """
-QWidget { background: #141418; color: #e8e8f0; font-family: 'JetBrains Mono', monospace; }
-QLineEdit { background: #1c1c22; border: 1px solid #2a2a38; border-radius: 7px; padding: 8px 12px; font-size: 12px; color: #e8e8f0; }
-QLineEdit:focus { border-color: #7c6af7; }
-QComboBox { background: #1c1c22; border: 1px solid #2a2a38; border-radius: 7px; padding: 7px 10px; font-size: 11px; color: #9090a8; }
-QComboBox:focus { border-color: #7c6af7; }
-QComboBox::drop-down { border: none; width: 20px; }
-QComboBox QAbstractItemView { background: #1c1c22; color: #e8e8f0; selection-background-color: #7c6af7; min-width: 300px; }
-QPushButton { border-radius: 7px; font-size: 12px; font-weight: 600; padding: 9px; border: none; }
-QLabel#header { font-size: 10px; color: #5a5a72; letter-spacing: 2px; }
-QLabel#streak { font-size: 11px; color: #fbbf24; }
-QLabel#sectionLabel { font-size: 10px; color: #5a5a72; letter-spacing: 1px; }
-"""
+from ui.theme import get_colors, base_stylesheet
 
 
 def _time_options(minutes_back: int = 90) -> list:
@@ -46,13 +33,9 @@ class PingPopup(QWidget):
         self.projects = load_projects()
         self._setup_window()
         self._setup_ui()
-
-        # Auto-dismiss timer — closes after 60s if user ignores it
         self._auto_dismiss = QTimer()
         self._auto_dismiss.setSingleShot(True)
         self._auto_dismiss.timeout.connect(self._on_auto_dismiss)
-
-        # Countdown label timer
         self._countdown_val = 60
         self._countdown_timer = QTimer()
         self._countdown_timer.timeout.connect(self._tick_countdown)
@@ -64,181 +47,199 @@ class PingPopup(QWidget):
             Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setFixedWidth(420)
-        self.setStyleSheet(STYLE)
+        self.setFixedWidth(400)
+
+    def _apply_theme(self):
+        c = get_colors()
+        self.setStyleSheet(base_stylesheet(c) + f"""
+            QFrame#card {{
+                background: {c['s0']};
+                border: 1px solid {c['border']};
+                border-radius: 14px;
+            }}
+            QWidget#header {{
+                background: {c['s1']};
+                border-radius: 14px 14px 0 0;
+                border-bottom: 1px solid {c['border']};
+            }}
+            QFrame#activeChip {{
+                background: {c['s1']};
+                border: 1px solid {c['border']};
+                border-radius: 9px;
+            }}
+            QPushButton#btnStillOn {{
+                background: {c['green_bg']};
+                border: 1px solid {c['green_border']};
+                color: {c['green']};
+                text-align: left;
+                padding: 10px 13px;
+            }}
+            QPushButton#btnStillOn:hover {{ background: rgba(74,222,128,0.13); }}
+            QPushButton#btnEndTask {{
+                background: {c['red_bg']};
+                border: 1px solid {c['red_border']};
+                color: {c['red']};
+                text-align: left;
+                padding: 10px 13px;
+            }}
+            QPushButton#btnEndTask:hover {{ background: rgba(252,165,165,0.13); }}
+        """)
 
     def _setup_ui(self):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
 
-        card = QFrame()
-        card.setStyleSheet("QFrame { background: #141418; border: 1px solid #353545; border-radius: 14px; }")
-        card_layout = QVBoxLayout(card)
+        self.card = QFrame()
+        self.card.setObjectName("card")
+        card_layout = QVBoxLayout(self.card)
         card_layout.setContentsMargins(0, 0, 0, 0)
         card_layout.setSpacing(0)
 
-        # ── Header ────────────────────────────────────────────────────────────
-        header_bar = QWidget()
-        header_bar.setStyleSheet("background: #1c1c22; border-radius: 14px 14px 0 0; border-bottom: 1px solid #2a2a38;")
-        header_layout = QHBoxLayout(header_bar)
-        header_layout.setContentsMargins(14, 10, 14, 10)
-        lbl_header = QLabel("WORKPULSE · PING")
-        lbl_header.setObjectName("header")
-        self.lbl_streak = QLabel("🔥 0 entries")
-        self.lbl_streak.setObjectName("streak")
-        header_layout.addWidget(lbl_header)
-        header_layout.addStretch()
-        header_layout.addWidget(self.lbl_streak)
-        card_layout.addWidget(header_bar)
-
-        # ── Body ──────────────────────────────────────────────────────────────
-        body = QWidget()
-        body_layout = QVBoxLayout(body)
-        body_layout.setContentsMargins(14, 14, 14, 14)
-        body_layout.setSpacing(8)
-
-        # Current task display
-        self.active_frame = QFrame()
-        self.active_frame.setStyleSheet("""
-            QFrame {
-                background: #1c1c22;
-                border: 1px solid #2a2a38;
-                border-radius: 8px;
-                padding: 2px;
-            }
-        """)
-        active_layout = QHBoxLayout(self.active_frame)
-        active_layout.setContentsMargins(12, 10, 12, 10)
+        # Header
+        header = QWidget()
+        header.setObjectName("header")
+        hdr_layout = QHBoxLayout(header)
+        hdr_layout.setContentsMargins(14, 10, 14, 10)
         self.lbl_dot = QLabel("●")
-        self.lbl_dot.setStyleSheet("color: #4ade80; font-size: 8px;")
-        self.lbl_active_task = QLabel("")
-        self.lbl_active_task.setStyleSheet("color: #e8e8f0; font-size: 12px;")
-        self.lbl_active_task.setWordWrap(True)
-        active_layout.addWidget(self.lbl_dot)
-        active_layout.addWidget(self.lbl_active_task, 1)
-        body_layout.addWidget(self.active_frame)
+        self.lbl_dot.setFixedWidth(10)
+        self.lbl_header = QLabel("WORKPULSE · PING")
+        self.lbl_header.setStyleSheet("font-size: 10px; font-weight: 600; letter-spacing: 3px;")
+        self.lbl_streak = QLabel("🔥 0 entries")
+        self.lbl_streak.setStyleSheet("font-size: 10px; font-weight: 600;")
+        hdr_layout.addWidget(self.lbl_dot)
+        hdr_layout.addWidget(self.lbl_header)
+        hdr_layout.addStretch()
+        hdr_layout.addWidget(self.lbl_streak)
+        card_layout.addWidget(header)
 
-        # ── Option 1: Still on it ─────────────────────────────────────────────
+        # Body
+        body = QWidget()
+        self.body_layout = QVBoxLayout(body)
+        self.body_layout.setContentsMargins(14, 14, 14, 16)
+        self.body_layout.setSpacing(9)
+
+        # ── Active-task section (hidden when no active task) ──────────────────
+        self.active_section = QWidget()
+        act_layout = QVBoxLayout(self.active_section)
+        act_layout.setContentsMargins(0, 0, 0, 0)
+        act_layout.setSpacing(7)
+
+        self.active_chip = QFrame()
+        self.active_chip.setObjectName("activeChip")
+        chip_row = QHBoxLayout(self.active_chip)
+        chip_row.setContentsMargins(12, 10, 12, 10)
+        self.lbl_chip_dot = QLabel("●")
+        self.lbl_chip_dot.setFixedWidth(10)
+        self.lbl_chip_info = QWidget()
+        chip_info_layout = QVBoxLayout(self.lbl_chip_info)
+        chip_info_layout.setContentsMargins(0, 0, 0, 0)
+        chip_info_layout.setSpacing(1)
+        self.lbl_task_name = QLabel()
+        self.lbl_task_name.setStyleSheet("font-size: 12px; font-weight: 500;")
+        self.lbl_task_meta = QLabel()
+        self.lbl_task_meta.setStyleSheet("font-size: 10px;")
+        chip_info_layout.addWidget(self.lbl_task_name)
+        chip_info_layout.addWidget(self.lbl_task_meta)
+        self.lbl_elapsed = QLabel()
+        self.lbl_elapsed.setStyleSheet("font-size: 10px; font-family: 'JetBrains Mono', monospace;")
+        chip_row.addWidget(self.lbl_chip_dot)
+        chip_row.addWidget(self.lbl_chip_info, 1)
+        chip_row.addWidget(self.lbl_elapsed)
+        act_layout.addWidget(self.active_chip)
+
         self.btn_still_on = QPushButton("✓  Still on it — keep going")
-        self.btn_still_on.setStyleSheet("""
-            QPushButton {
-                background: #1a2e1a;
-                border: 1px solid #4ade80;
-                color: #4ade80;
-                border-radius: 8px;
-                padding: 10px 14px;
-                text-align: left;
-                font-size: 12px;
-            }
-            QPushButton:hover { background: rgba(74,222,128,0.15); }
-        """)
+        self.btn_still_on.setObjectName("btnStillOn")
         self.btn_still_on.clicked.connect(self._on_still_on)
-        body_layout.addWidget(self.btn_still_on)
+        act_layout.addWidget(self.btn_still_on)
 
-        # ── Option 2: End this task ───────────────────────────────────────────
-        end_row = QHBoxLayout()
+        end_row_widget = QWidget()
+        end_row = QHBoxLayout(end_row_widget)
+        end_row.setContentsMargins(0, 0, 0, 0)
+        end_row.setSpacing(8)
         self.btn_end_task = QPushButton("⏹  Done with this task")
-        self.btn_end_task.setStyleSheet("""
-            QPushButton {
-                background: #2a1a1a;
-                border: 1px solid #f87171;
-                color: #f87171;
-                border-radius: 8px;
-                padding: 10px 14px;
-                text-align: left;
-                font-size: 12px;
-            }
-            QPushButton:hover { background: rgba(248,113,113,0.15); }
-        """)
+        self.btn_end_task.setObjectName("btnEndTask")
         self.btn_end_task.clicked.connect(self._on_end_task)
-
-        lbl_ended_at = QLabel("ended at:")
-        lbl_ended_at.setStyleSheet("color: #5a5a72; font-size: 10px;")
+        lbl_ended = QLabel("ended at")
+        lbl_ended.setStyleSheet("font-size: 10px;")
         self.cmb_end_time = QComboBox()
         self.cmb_end_time.setFixedWidth(110)
-
         end_row.addWidget(self.btn_end_task, 1)
-        end_row.addWidget(lbl_ended_at)
+        end_row.addWidget(lbl_ended)
         end_row.addWidget(self.cmb_end_time)
-        body_layout.addLayout(end_row)
+        act_layout.addWidget(end_row_widget)
+        self.body_layout.addWidget(self.active_section)
 
-        # ── Option 3: Switch to new task ──────────────────────────────────────
-        div = QLabel("OR SWITCHED TO SOMETHING NEW")
-        div.setObjectName("sectionLabel")
-        body_layout.addWidget(div)
+        # ── First-ping hero (shown when no active task) ───────────────────────
+        self.first_ping_section = QWidget()
+        fp_layout = QVBoxLayout(self.first_ping_section)
+        fp_layout.setContentsMargins(0, 4, 0, 4)
+        fp_layout.setSpacing(2)
+        self.lbl_gm_eyebrow = QLabel()
+        self.lbl_gm_eyebrow.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_gm_title = QLabel("What are you starting with?")
+        self.lbl_gm_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_gm_title.setStyleSheet("font-size: 16px; font-weight: 600;")
+        self.lbl_gm_sub = QLabel("Log your first task to kick off the day")
+        self.lbl_gm_sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_gm_sub.setStyleSheet("font-size: 11px;")
+        fp_layout.addWidget(self.lbl_gm_eyebrow)
+        fp_layout.addWidget(self.lbl_gm_title)
+        fp_layout.addWidget(self.lbl_gm_sub)
+        self.body_layout.addWidget(self.first_ping_section)
+
+        # ── New-task form (always shown) ──────────────────────────────────────
+        self.divider_lbl = QLabel("OR SWITCHED TO SOMETHING NEW")
+        self.divider_lbl.setStyleSheet("font-size: 8.5px; font-weight: 600; letter-spacing: 2px;")
+        self.body_layout.addWidget(self.divider_lbl)
 
         self.txt_desc = QLineEdit()
         self.txt_desc.setPlaceholderText("What are you working on...")
-        body_layout.addWidget(self.txt_desc)
+        self.body_layout.addWidget(self.txt_desc)
 
         self.cmb_project = QComboBox()
-        self.cmb_project.setMinimumWidth(390)
-        self.cmb_project.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.cmb_task = QComboBox()
         for p in self.projects:
             self.cmb_project.addItem(p["name"], p["id"])
-        self.cmb_task = QComboBox()
-        self.cmb_task.setMinimumWidth(390)
         self.cmb_project.currentIndexChanged.connect(self._on_project_changed)
-        body_layout.addWidget(self.cmb_project)
-        body_layout.addWidget(self.cmb_task)
+        self.body_layout.addWidget(self.cmb_project)
+        self.body_layout.addWidget(self.cmb_task)
 
-        started_row = QHBoxLayout()
-        lbl_started = QLabel("switched at:")
-        lbl_started.setObjectName("sectionLabel")
+        switched_row = QHBoxLayout()
+        self.lbl_switched = QLabel("switched at")
+        self.lbl_switched.setStyleSheet("font-size: 10px;")
         self.cmb_started = QComboBox()
         self.cmb_started.setFixedWidth(110)
-        started_row.addWidget(lbl_started)
-        started_row.addStretch()
-        started_row.addWidget(self.cmb_started)
-        body_layout.addLayout(started_row)
+        switched_row.addWidget(self.lbl_switched)
+        switched_row.addStretch()
+        switched_row.addWidget(self.cmb_started)
+        self.body_layout.addLayout(switched_row)
 
         btn_row = QHBoxLayout()
         self.btn_log = QPushButton("Log New Task")
-        self.btn_log.setStyleSheet("""
-            QPushButton {
-                background: #7c6af7;
-                color: white;
-                border-radius: 8px;
-                padding: 10px;
-            }
-            QPushButton:hover { background: #9d8fff; }
-        """)
+        self.btn_log.setObjectName("btnPrimary")
         self.btn_log.clicked.connect(self._on_log)
-
         self.btn_skip = QPushButton("Skip")
+        self.btn_skip.setObjectName("btnGhost")
         self.btn_skip.setFixedWidth(70)
-        self.btn_skip.setStyleSheet("""
-            QPushButton {
-                background: #1c1c22;
-                border: 1px solid #2a2a38;
-                color: #5a5a72;
-                border-radius: 8px;
-                padding: 10px;
-            }
-            QPushButton:hover { color: #9090a8; }
-        """)
         self.btn_skip.clicked.connect(self.hide)
-
         btn_row.addWidget(self.btn_log)
         btn_row.addWidget(self.btn_skip)
-        body_layout.addLayout(btn_row)
+        self.body_layout.addLayout(btn_row)
 
-        bottom_row = QHBoxLayout()
-        hint = QLabel("Tab · Enter · Esc — keyboard friendly")
-        hint.setStyleSheet("font-size: 10px; color: #3a3a52;")
+        footer_row = QHBoxLayout()
+        hint = QLabel("Tab · Enter · Esc")
+        hint.setStyleSheet("font-size: 9.5px;")
         self.lbl_countdown = QLabel("auto-closing in 60s")
-        self.lbl_countdown.setStyleSheet("font-size: 10px; color: #3a3a52;")
+        self.lbl_countdown.setStyleSheet("font-size: 9.5px;")
         self.lbl_countdown.setAlignment(Qt.AlignmentFlag.AlignRight)
-        bottom_row.addWidget(hint)
-        bottom_row.addStretch()
-        bottom_row.addWidget(self.lbl_countdown)
-        body_layout.addLayout(bottom_row)
+        footer_row.addWidget(hint)
+        footer_row.addStretch()
+        footer_row.addWidget(self.lbl_countdown)
+        self.body_layout.addLayout(footer_row)
 
         card_layout.addWidget(body)
-        outer.addWidget(card)
-
+        outer.addWidget(self.card)
         self._on_project_changed(0)
-        self._populate_times()
 
     def _populate_times(self):
         options = _time_options()
@@ -249,36 +250,66 @@ class PingPopup(QWidget):
             self.cmb_started.addItem(label, val)
 
     def _on_project_changed(self, index):
-        if not hasattr(self, 'cmb_task'):
-            return
-        if index < 0 or index >= len(self.projects):
+        if not hasattr(self, "cmb_task") or index < 0 or index >= len(self.projects):
             return
         self.cmb_task.clear()
         for task in self.projects[index].get("tasks", []):
             self.cmb_task.addItem(task)
 
     def _refresh_active(self):
+        c = get_colors()
         active = database.get_active_entry()
+
         if active:
+            self.active_section.setVisible(True)
+            self.first_ping_section.setVisible(False)
+            self.divider_lbl.setVisible(True)
+            self.btn_log.setText("Log New Task")
+            self.lbl_switched.setText("switched at")
+            self.btn_skip.setVisible(True)
+
             task = active.get("task", "")
-            if " \u2014 " in task:
-                task = task.split(" \u2014 ", 1)[1]
-            elif " - " in task:
-                task = task.split(" - ", 1)[1]
-            # No truncation — show full task
-            self.lbl_active_task.setText(f"{task}  ·  {active['project_name']}")
-            self.active_frame.setVisible(True)
-            self.btn_still_on.setVisible(True)
-            self.btn_end_task.setVisible(True)
-            self.cmb_end_time.setVisible(True)
+            task_display = task.split(" \u2014 ", 1)[-1] if " \u2014 " in task else task
+            project_name = active.get("project_name", "")
+            self.lbl_task_name.setText(task_display)
+            self.lbl_task_meta.setText(project_name)
+
+            try:
+                now = datetime.now()
+                start = datetime.strptime(active["start_time"], "%H:%M").replace(
+                    year=now.year, month=now.month, day=now.day
+                )
+                mins = max(0, int((now - start).total_seconds() // 60))
+                elapsed = f"{mins}m" if mins < 60 else f"{mins//60}h {mins%60}m"
+            except Exception:
+                elapsed = ""
+            self.lbl_elapsed.setText(elapsed)
+            self.lbl_elapsed.setStyleSheet(
+                f"font-size: 10px; font-family: 'JetBrains Mono', monospace; color: {c['gold_dim']};"
+            )
+            self.lbl_chip_dot.setStyleSheet(f"color: {c['state_active']}; font-size: 8px;")
+            self.lbl_task_meta.setStyleSheet(f"font-size: 10px; color: {c['t3']};")
+
         else:
-            self.active_frame.setVisible(False)
-            self.btn_still_on.setVisible(False)
-            self.btn_end_task.setVisible(False)
-            self.cmb_end_time.setVisible(False)
+            self.active_section.setVisible(False)
+            self.first_ping_section.setVisible(True)
+            self.divider_lbl.setVisible(False)
+            self.btn_log.setText("Start Tracking")
+            self.lbl_switched.setText("started at")
+            self.btn_skip.setVisible(True)
+
+            name = config.get("USER_NAME", "Farhan").split()[0]
+            self.lbl_gm_eyebrow.setText(f"Good morning, {name}")
+            self.lbl_gm_eyebrow.setStyleSheet(
+                f"font-size: 10px; font-weight: 600; letter-spacing: 2px; color: {c['gold_dim']};"
+            )
+            self.lbl_streak.setText("✦ Day start")
+
+        self.lbl_dot.setStyleSheet(f"color: {c['state_active']}; font-size: 8px; background: transparent;")
 
     def _refresh_streak(self):
-        self.lbl_streak.setText(f"🔥 {database.count_entries_today()} entries")
+        count = database.count_entries_today()
+        self.lbl_streak.setText(f"🔥 {count} entries")
 
     def _on_still_on(self):
         database.extend_active_entry()
@@ -295,25 +326,24 @@ class PingPopup(QWidget):
         desc = self.txt_desc.text().strip()
         if not desc:
             self.txt_desc.setFocus()
-            self.txt_desc.setStyleSheet(self.txt_desc.styleSheet() + "border-color: #f87171;")
             return
         idx = self.cmb_project.currentIndex()
         if idx < 0 or idx >= len(self.projects):
             return
         project = self.projects[idx]
-        task = f"{self.cmb_task.currentText()} \u2014 {desc}"
+        task_type = self.cmb_task.currentText()
+        task = f"{task_type} \u2014 {desc}" if task_type else desc
         database.log_entry(
             project_id=project["id"],
             project_name=project["name"],
             task=task,
-            stopped_at=self.cmb_started.currentData()
+            stopped_at=self.cmb_started.currentData(),
         )
         self.logged.emit()
         self.txt_desc.clear()
         self.hide()
 
     def _on_auto_dismiss(self):
-        """User ignored the ping — silently continue current task."""
         self._countdown_timer.stop()
         self.hide()
 
@@ -325,18 +355,24 @@ class PingPopup(QWidget):
             self.lbl_countdown.setText("closing...")
 
     def showEvent(self, event):
+        self.projects = load_projects()
+        self.cmb_project.clear()
+        for p in self.projects:
+            self.cmb_project.addItem(p["name"], p["id"])
+        self._on_project_changed(0)
         self._populate_times()
+        self._apply_theme()
         self._refresh_active()
-        self._refresh_streak()
+        active = database.get_active_entry()
+        if active:
+            self._refresh_streak()
         self.txt_desc.clear()
-        self.txt_desc.setStyleSheet("")
-        # Start auto-dismiss countdown
         self._countdown_val = 60
         self.lbl_countdown.setText("auto-closing in 60s")
         self._auto_dismiss.stop()
         self._auto_dismiss.start(60_000)
         self._countdown_timer.stop()
-        self._countdown_timer.start(1000)
+        self._countdown_timer.start(1_000)
         super().showEvent(event)
         self._position_top_center()
 
@@ -347,8 +383,7 @@ class PingPopup(QWidget):
 
     def _position_top_center(self):
         screen = QApplication.primaryScreen().availableGeometry()
-        x = (screen.width() - self.width()) // 2
-        self.move(x, 40)
+        self.move((screen.width() - self.width()) // 2, 40)
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
