@@ -1,10 +1,31 @@
-import { app, BrowserWindow, Tray, Menu, Notification, nativeImage, globalShortcut, screen } from 'electron'
+import { app, BrowserWindow, Tray, Menu, Notification, nativeImage, globalShortcut, screen, shell } from 'electron'
 import path from 'path'
+import fs from 'fs'
 import { initDb, countEntriesToday, getActiveEntry, endCurrentEntry, getTotalLoggedMinutes } from './database.js'
 import { get, set } from './config.js'
 import { PingTimer } from './timer.js'
 import { registerIpc } from './ipc.js'
 import { isConfigured, syncProjectsToCache } from './clockify.js'
+
+// ── Error logging ─────────────────────────────────────────────────────────────
+function getLogPath() {
+  try { return path.join(app.getPath('userData'), 'error.log') } catch { return null }
+}
+
+function writeLog(label, err) {
+  const logPath = getLogPath()
+  if (!logPath) return
+  const line = `[${new Date().toISOString()}] ${label}: ${err?.stack || err}\n`
+  try { fs.appendFileSync(logPath, line) } catch {}
+}
+
+process.on('uncaughtException', (err) => {
+  writeLog('uncaughtException', err)
+})
+
+process.on('unhandledRejection', (err) => {
+  writeLog('unhandledRejection', err)
+})
 
 // ── Dev/Prod URL helper ───────────────────────────────────────────────────────
 function winURL(windowName) {
@@ -90,6 +111,7 @@ function buildTrayMenu(appRef) {
     { type: 'separator' },
     { label: 'Settings',   click: () => { appRef.settingsWin?.show(); appRef.settingsWin?.focus() } },
     { type: 'separator' },
+    { label: 'Open Log File', click: () => { const p = getLogPath(); if (p && fs.existsSync(p)) shell.openPath(p) } },
     { label: 'Exit',       click: () => app.quit() },
   ])
 }
@@ -224,6 +246,7 @@ class WorkPulse {
 
   _firePing() {
     sendToWin('statusbar', 'state', 'active')
+    if (!this.pingWin || this.pingWin.isDestroyed()) return
     centerTop(this.pingWin)
     this.pingWin.show()
     this.pingWin.focus()
@@ -231,6 +254,7 @@ class WorkPulse {
   }
 
   showQuickLog() {
+    if (!this.quickWin || this.quickWin.isDestroyed()) return
     centerTop(this.quickWin, 50)
     this.quickWin.show()
     this.quickWin.focus()
@@ -238,6 +262,7 @@ class WorkPulse {
   }
 
   showInterrupt() {
+    if (!this.interruptWin || this.interruptWin.isDestroyed()) return
     centerTop(this.interruptWin)
     this.interruptWin.show()
     this.interruptWin.focus()
