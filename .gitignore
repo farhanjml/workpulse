@@ -20,6 +20,7 @@ build/
 .vscode/
 .idea/
 *.swp
+.claude/
 
 # OS
 .DS_Store
@@ -31,3 +32,7 @@ desktop.ini
 
 # Projects config — contains client names, keep local only
 data/projects.json
+
+# Markdown files — local only (except design docs)
+*.md
+!docs/**/*.md
