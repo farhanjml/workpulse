@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
-from core import database
+from core import database, config
 from core.config import load_projects
 from ui.theme import get_colors, base_stylesheet
 
@@ -87,12 +87,12 @@ class InterruptLogPopup(QWidget):
         lbl_dot.setObjectName("headerDot")
         lbl_title = QLabel("QUICK INTERRUPT")
         lbl_title.setStyleSheet("font-size: 10px; font-weight: 600; letter-spacing: 3px;")
-        lbl_hotkey = QLabel("Alt+Shift+L")
-        lbl_hotkey.setStyleSheet("font-size: 10px; font-family: 'JetBrains Mono', monospace;")
+        self.lbl_hotkey = QLabel("Alt+Shift+L")
+        self.lbl_hotkey.setStyleSheet("font-size: 10px; font-family: 'JetBrains Mono', monospace;")
         hdr_layout.addWidget(lbl_dot)
         hdr_layout.addWidget(lbl_title)
         hdr_layout.addStretch()
-        hdr_layout.addWidget(lbl_hotkey)
+        hdr_layout.addWidget(self.lbl_hotkey)
         card_layout.addWidget(header)
 
         # Body
@@ -250,6 +250,8 @@ class InterruptLogPopup(QWidget):
             self.cmb_project.addItem(p["name"], p["id"])
         self._on_project_changed(0)
         self._apply_theme()
+        hotkey = config.get("INTERRUPT_HOTKEY", "alt+shift+l").upper().replace("+", "+")
+        self.lbl_hotkey.setText(hotkey)
         self._refresh_running()
         self._select_duration(10)
         self.txt_desc.clear()

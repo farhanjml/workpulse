@@ -22,6 +22,7 @@ DEFAULTS = {
     "WORK_START": "09:00",
     "END_OF_DAY": "18:00",
     "HOTKEY": "alt+l",
+    "INTERRUPT_HOTKEY": "alt+shift+l",
     "SOUND_THEME": "soft_chime",
     "VOLUME": "60",
     "PLAY_ON": "all",

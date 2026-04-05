@@ -25,10 +25,27 @@ from ui.theme import load_fonts
 
 # Windows hotkey constants
 MOD_ALT   = 0x0001
+MOD_CTRL  = 0x0002
 MOD_SHIFT = 0x0004
+MOD_WIN   = 0x0008
 WM_HOTKEY = 0x0312
+WM_QUIT   = 0x0012
 HOTKEY_ID           = 1
-HOTKEY_ID_INTERRUPT = 2   # Alt+Shift+L
+HOTKEY_ID_INTERRUPT = 2
+
+
+def parse_hotkey(combo: str) -> tuple:
+    """Parse 'alt+shift+l' → (modifiers, vk_code). Returns (0, 0) on failure."""
+    parts = combo.lower().split("+")
+    mods, key = 0, None
+    for p in parts:
+        if p == "alt":                   mods |= MOD_ALT
+        elif p in ("ctrl", "control"):   mods |= MOD_CTRL
+        elif p == "shift":               mods |= MOD_SHIFT
+        elif p in ("win", "meta"):       mods |= MOD_WIN
+        else:                            key = p
+    vk = ord(key.upper()) if key and len(key) == 1 else 0
+    return mods, vk
 
 
 class AppSignals(QObject):
@@ -44,19 +61,32 @@ class HotkeyListener(threading.Thread):
     def __init__(self, signal: AppSignals):
         super().__init__(daemon=True)
         self.signal = signal
+        self._win32_tid = 0
+
+    def stop(self):
+        """Post WM_QUIT to this thread's message queue to exit the loop."""
+        if self._win32_tid:
+            ctypes.windll.user32.PostThreadMessageW(self._win32_tid, WM_QUIT, 0, 0)
 
     def run(self):
-        result = ctypes.windll.user32.RegisterHotKey(None, HOTKEY_ID, MOD_ALT, 0x4C)
-        if not result:
-            print(f"[Hotkey] RegisterHotKey failed: {ctypes.GetLastError()}")
-            return
-        print("[Hotkey] Alt+L registered")
+        self._win32_tid = ctypes.windll.kernel32.GetCurrentThreadId()
 
-        result2 = ctypes.windll.user32.RegisterHotKey(None, HOTKEY_ID_INTERRUPT, MOD_ALT | MOD_SHIFT, 0x4C)
+        hotkey_combo = config.get("HOTKEY", "alt+l")
+        interrupt_combo = config.get("INTERRUPT_HOTKEY", "alt+shift+l")
+        mods1, vk1 = parse_hotkey(hotkey_combo)
+        mods2, vk2 = parse_hotkey(interrupt_combo)
+
+        result = ctypes.windll.user32.RegisterHotKey(None, HOTKEY_ID, mods1, vk1)
+        if not result:
+            print(f"[Hotkey] RegisterHotKey ({hotkey_combo}) failed: {ctypes.GetLastError()}")
+            return
+        print(f"[Hotkey] {hotkey_combo} registered")
+
+        result2 = ctypes.windll.user32.RegisterHotKey(None, HOTKEY_ID_INTERRUPT, mods2, vk2)
         if not result2:
-            print(f"[Hotkey] RegisterHotKey (Alt+Shift+L) failed: {ctypes.GetLastError()}")
+            print(f"[Hotkey] RegisterHotKey ({interrupt_combo}) failed: {ctypes.GetLastError()}")
         else:
-            print("[Hotkey] Alt+Shift+L registered")
+            print(f"[Hotkey] {interrupt_combo} registered")
 
         msg = ctypes.wintypes.MSG()
         while True:
@@ -198,6 +228,18 @@ class WorkPulse:
 
     def _on_settings_saved(self):
         self.tray.show_toast("Settings saved", "Changes applied.")
+        self._restart_hotkey_listener()
+
+    def _restart_hotkey_listener(self):
+        """Stop the current hotkey listener and start a new one with updated config."""
+        old = self._hotkey_listener
+        old.stop()
+        def _start_new():
+            import time
+            time.sleep(0.15)   # let old thread exit and unregister
+            self._hotkey_listener = HotkeyListener(self.signals)
+            self._hotkey_listener.start()
+        threading.Thread(target=_start_new, daemon=True).start()
 
     def _check_end_of_day(self):
         now = datetime.now().strftime("%H:%M")

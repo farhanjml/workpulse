@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QPropertyAnimation, QEasingCurve, QRect
 
-from core import database
+from core import database, config
 from core.config import load_projects
 from ui.theme import get_colors, base_stylesheet
 
@@ -88,11 +88,11 @@ class QuickLogPopup(QWidget):
         header_layout.setContentsMargins(14, 10, 14, 10)
         lbl_header = QLabel("WORKPULSE · QUICK LOG")
         lbl_header.setObjectName("header")
-        lbl_hotkey = QLabel("Alt+L")
-        lbl_hotkey.setStyleSheet("font-size: 10px; color: #3a3a52;")
+        self.lbl_hotkey = QLabel("Alt+L")
+        self.lbl_hotkey.setStyleSheet("font-size: 10px;")
         header_layout.addWidget(lbl_header)
         header_layout.addStretch()
-        header_layout.addWidget(lbl_hotkey)
+        header_layout.addWidget(self.lbl_hotkey)
         card_layout.addWidget(header_bar)
 
         # Body
@@ -207,6 +207,7 @@ class QuickLogPopup(QWidget):
 
     def _refresh_active(self):
         """Refresh the currently running task display."""
+        c = get_colors()
         active = database.get_active_entry()
         if active:
             task = active.get("task", "")
@@ -228,6 +229,9 @@ class QuickLogPopup(QWidget):
             except Exception:
                 elapsed = ""
 
+            self.lbl_active_task.setStyleSheet(f"color: {c['t1']}; font-size: 11px;")
+            self.lbl_active_elapsed.setStyleSheet(f"color: {c['t3']}; font-size: 10px;")
+            self.lbl_active_dot.setStyleSheet(f"color: {c['state_active']}; font-size: 8px;")
             self.lbl_active_task.setText(task)
             self.lbl_active_elapsed.setText(elapsed)
             self.active_section.show()
@@ -264,6 +268,8 @@ class QuickLogPopup(QWidget):
 
     def showEvent(self, event):
         self._apply_theme()
+        hotkey = config.get("HOTKEY", "alt+l").upper().replace("+", "+")
+        self.lbl_hotkey.setText(hotkey)
         self._populate_times()
         self._refresh_active()
         self.txt_desc.clear()
