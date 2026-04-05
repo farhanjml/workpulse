@@ -16,8 +16,17 @@ export function registerIpc({ timer, windows, tray }) {
 
   // ── Projects ──────────────────────────────────────────────────────────────
   ipcMain.handle('projects:load', () => clockify.loadProjects())
+  ipcMain.handle('workspaces:fetch', async (_e, apiKey) => {
+    if (apiKey) saveAll({ CLOCKIFY_API_KEY: apiKey })
+    try {
+      return { ok: true, workspaces: await clockify.fetchWorkspaces() }
+    } catch (e) {
+      const status = e?.response?.status
+      const msg = e?.response?.data?.message || e?.message || String(e)
+      return { ok: false, error: `HTTP ${status || '?'}: ${msg}` }
+    }
+  })
   ipcMain.handle('projects:sync', async (_e, partialCfg) => {
-    // Save API credentials before syncing so user doesn't have to hit Save first
     if (partialCfg) saveAll(partialCfg)
     return clockify.syncProjectsToCache()
   })

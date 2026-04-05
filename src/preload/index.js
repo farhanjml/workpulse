@@ -6,8 +6,9 @@ contextBridge.exposeInMainWorld('api', {
   saveConfig:   (data)   => ipcRenderer.invoke('config:save', data),
 
   // Projects
-  getProjects:  ()       => ipcRenderer.invoke('projects:load'),
-  syncProjects: (cfg)    => ipcRenderer.invoke('projects:sync', cfg),
+  getProjects:     ()        => ipcRenderer.invoke('projects:load'),
+  fetchWorkspaces: (apiKey)  => ipcRenderer.invoke('workspaces:fetch', apiKey),
+  syncProjects:    (cfg)     => ipcRenderer.invoke('projects:sync', cfg),
 
   // Database
   getActive:    ()       => ipcRenderer.invoke('db:get-active'),

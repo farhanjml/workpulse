@@ -56,6 +56,11 @@ export async function pushAllUnsynced() {
   }
 }
 
+export async function fetchWorkspaces() {
+  const res = await axios.get(`${BASE}/workspaces`, { headers: headers() })
+  return (res.data || []).map(w => ({ id: w.id, name: w.name }))
+}
+
 export async function fetchProjects(wsId) {
   const res = await axios.get(`${BASE}/workspaces/${wsId}/projects`, {
     headers: headers(),

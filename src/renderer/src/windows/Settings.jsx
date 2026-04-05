@@ -98,6 +98,8 @@ export default function Settings() {
   const [cfg, setCfg] = useState(null)
   const [syncStatus, setSyncStatus] = useState('')
   const [saved, setSaved] = useState(false)
+  const [workspaces, setWorkspaces] = useState([])
+  const [loadingWs, setLoadingWs] = useState(false)
 
   useEffect(() => {
     window.api.getConfig().then(c => {
@@ -112,8 +114,26 @@ export default function Settings() {
     await window.api.saveConfig(cfg)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
-    // Update theme immediately
     document.documentElement.setAttribute('data-theme', cfg.DARK_MODE ? 'dark' : 'light')
+  }
+
+  const onLoadWorkspaces = async () => {
+    if (!cfg.CLOCKIFY_API_KEY) { setSyncStatus('Enter your API key first'); return }
+    setLoadingWs(true)
+    setSyncStatus('Loading workspaces…')
+    const result = await window.api.fetchWorkspaces(cfg.CLOCKIFY_API_KEY)
+    setLoadingWs(false)
+    if (result?.ok) {
+      setWorkspaces(result.workspaces)
+      if (result.workspaces.length === 1) {
+        update('CLOCKIFY_WORKSPACE_ID', result.workspaces[0].id)
+        setSyncStatus(`Workspace loaded — click Sync Projects`)
+      } else {
+        setSyncStatus(`Pick a workspace below, then click Sync Projects`)
+      }
+    } else {
+      setSyncStatus(`Failed to load workspaces: ${result?.error}`)
+    }
   }
 
   const onSync = async () => {
@@ -185,11 +205,26 @@ export default function Settings() {
 
         <Section label="CLOCKIFY" />
         <Row label="API Key">
-          <input type="password" className="input no-drag" style={{ width: 200 }} value={cfg.CLOCKIFY_API_KEY || ''} placeholder="Paste API key…" onChange={e => update('CLOCKIFY_API_KEY', e.target.value)} />
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input type="password" className="input no-drag" style={{ width: 160 }} value={cfg.CLOCKIFY_API_KEY || ''} placeholder="Paste API key…" onChange={e => update('CLOCKIFY_API_KEY', e.target.value)} />
+            <button className="btn no-drag" style={{ background: 'var(--gold-bg)', borderColor: 'var(--gold-border)', color: 'var(--gold)' }} onClick={onLoadWorkspaces} disabled={loadingWs}>
+              {loadingWs ? '…' : 'Load'}
+            </button>
+          </div>
         </Row>
-        <Row label="Workspace ID">
-          <input type="text" className="input no-drag" style={{ width: 200 }} value={cfg.CLOCKIFY_WORKSPACE_ID || ''} placeholder="Workspace ID…" onChange={e => update('CLOCKIFY_WORKSPACE_ID', e.target.value)} />
-        </Row>
+        {workspaces.length > 1 && (
+          <Row label="Workspace">
+            <select className="select no-drag" style={{ width: 200 }} value={cfg.CLOCKIFY_WORKSPACE_ID || ''} onChange={e => update('CLOCKIFY_WORKSPACE_ID', e.target.value)}>
+              <option value="">— pick one —</option>
+              {workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          </Row>
+        )}
+        {workspaces.length === 0 && cfg.CLOCKIFY_WORKSPACE_ID && (
+          <Row label="Workspace ID">
+            <input type="text" className="input no-drag" style={{ width: 200 }} value={cfg.CLOCKIFY_WORKSPACE_ID} placeholder="Workspace ID…" onChange={e => update('CLOCKIFY_WORKSPACE_ID', e.target.value)} />
+          </Row>
+        )}
         <Row label="Sync Projects">
           <button className="btn no-drag" style={{ background: 'var(--gold-bg)', borderColor: 'var(--gold-border)', color: 'var(--gold)' }} onClick={onSync}>↻ Sync</button>
         </Row>
