@@ -154,11 +154,13 @@ class WorkPulse {
       skipTaskbar: false, width: 680, height: 600, minWidth: 620, minHeight: 500,
       show: false,
     })
+    this.summaryWin.on('close', (e) => { e.preventDefault(); this.summaryWin.hide() })
 
     this.settingsWin = createWindow('settings', {
       frame: true, transparent: false, alwaysOnTop: false,
       skipTaskbar: false, width: 480, height: 720, resizable: false, show: false,
     })
+    this.settingsWin.on('close', (e) => { e.preventDefault(); this.settingsWin.hide() })
   }
 
   _setupTray() {
